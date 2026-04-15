@@ -1,5 +1,8 @@
 # FITSIZ AI Sales Agent — Архитектура проекта
 
+> v0.2 (апрель 2026): убрали Telegram из проекта. Уведомления о тёплых лидах
+> теперь уходят на email менеджеру (`MANAGER_EMAIL` в `.env`).
+
 ## 1. Суть проекта
 
 Автономный AI-агент для холодных B2B-продаж сварочных масок FITSIZ. Агент берёт на себя полный цикл: от первого письма до момента, когда клиент говорит "давайте работать". После этого лид передаётся менеджеру.
@@ -23,7 +26,7 @@
 | Отправка документов | По запросу или по контексту — прайс-лист, каталог, листовка, КП |
 | Follow-up цепочки | Если нет ответа: 3 дня → follow-up 1, 7 дней → follow-up 2, 14 дней → финальное |
 | Квалификация | Определение статуса: холодный → заинтересован → обсуждение → тёплый → передан |
-| Передача менеджеру | Уведомление в Telegram + смена статуса, менеджер видит всю переписку |
+| Передача менеджеру | **Уведомление по email на `MANAGER_EMAIL`** со сводкой по лиду и ссылкой на переписку + смена статуса. Менеджер видит всю историю в дашборде. |
 | Dashboard | Веб-интерфейс для управления лидами, просмотра переписок, метрик |
 
 ### 2.2. Чего агент НЕ делает
@@ -33,6 +36,7 @@
 - Не звонит — только email
 - Не спамит — максимум 20 новых писем в день, с интервалами
 - Не отвечает мгновенно — задержка 15-45 минут (имитация живого человека)
+- **Не использует Telegram и другие мессенджеры** — весь сигнал идёт по email
 
 ---
 
@@ -47,10 +51,10 @@
 | База данных | SQLite (старт) → PostgreSQL (масштаб) | Ноль настройки на старте, миграция через Alembic |
 | ORM | SQLAlchemy 2.0 | Стандарт, async-поддержка |
 | Очереди задач | APScheduler | Лёгкий планировщик, достаточно для наших объёмов |
-| Email (отправка) | smtplib + email.mime | Стандартная библиотека Python |
+| Email (отправка) | smtplib + email.mime | Стандартная библиотека Python — используется и для писем клиентам, и для уведомлений менеджеру |
 | Email (чтение) | imapclient | Надёжная IMAP-библиотека |
 | AI-мозг | Anthropic API (Claude Sonnet) | Лучшее качество текста для B2B-коммуникаций |
-| Уведомления | python-telegram-bot | Алерты в Telegram |
+| Уведомления менеджеру | smtplib (reuse email_sender) | Единый канал — email, один путь отправки, одна инфраструктура. Никаких мессенджеров в проекте. |
 
 ### 3.2. Frontend (Dashboard)
 
@@ -89,23 +93,24 @@ fitsiz-sales-agent/
 │   │
 │   ├── models/                  # SQLAlchemy модели
 │   │   ├── lead.py              # Лид (компания, контакт, статус)
-│   │   ├── conversation.py      # Переписка (цепочка сообщений)
-│   │   ├── message.py           # Отдельное сообщение
+│   │   ├── message.py           # Отдельное сообщение (переписка строится по lead_id + email-threading)
 │   │   ├── document.py          # Загруженные документы (прайсы, каталоги)
 │   │   └── campaign.py          # Кампания (группа лидов + шаблон)
 │   │
 │   ├── services/
-│   │   ├── email_sender.py      # SMTP отправка через Mail.ru
+│   │   ├── email_sender.py      # SMTP отправка через Mail.ru — один модуль для писем клиентам И уведомлений менеджеру
 │   │   ├── email_reader.py      # IMAP чтение входящих
+│   │   ├── email_parser.py      # Парсинг входящих, очистка цитат и подписей
 │   │   ├── ai_engine.py         # Anthropic API — генерация писем и ответов
-│   │   ├── lead_qualifier.py    # Логика квалификации лида
-│   │   ├── scheduler.py         # APScheduler — cron-задачи
-│   │   ├── telegram_notifier.py # Уведомления в Telegram
-│   │   └── document_manager.py  # Управление PDF/документами
+│   │   ├── manager_notifier.py  # Уведомления менеджеру на email при warm-лидах
+│   │   ├── antispam.py          # Лимиты отправки, рандомные задержки
+│   │   ├── lead_importer.py     # Импорт CSV/XLSX (переиспользуется HTTP и CLI)
+│   │   └── scheduler.py         # APScheduler — cron-задачи
 │   │
 │   ├── api/
 │   │   ├── leads.py             # CRUD лидов + импорт CSV
-│   │   ├── conversations.py     # Просмотр переписок
+│   │   ├── conversations.py     # Просмотр переписок + AI-черновики + модерация
+│   │   ├── email.py             # Тестовая отправка / проверка входящих / квота
 │   │   ├── campaigns.py         # Управление кампаниями
 │   │   ├── documents.py         # Загрузка документов
 │   │   ├── dashboard.py         # Метрики и статистика
@@ -116,7 +121,8 @@ fitsiz-sales-agent/
 │   │   ├── cold_email.md        # Шаблон генерации cold-письма
 │   │   ├── follow_up.md         # Шаблоны follow-up
 │   │   ├── reply_handler.md     # Обработка входящих ответов
-│   │   └── qualifier.md         # Промпт квалификации
+│   │   ├── qualifier.md         # Промпт квалификации
+│   │   └── manager_notification.md  # Шаблон письма менеджеру о тёплом лиде
 │   │
 │   ├── knowledge/               # Знания агента о продукте
 │   │   ├── product_catalog.md   # Каталог масок (из xlsx)
@@ -133,7 +139,8 @@ fitsiz-sales-agent/
 │   │   ├── pages/
 │   │   │   ├── Dashboard.jsx    # Главная: метрики, активные лиды
 │   │   │   ├── Leads.jsx        # Таблица лидов + импорт
-│   │   │   ├── Conversations.jsx # Переписки (как email-клиент)
+│   │   │   ├── Conversations.jsx  # Список переписок
+│   │   │   ├── ConversationDetail.jsx  # Переписка + AI-черновики + модерация
 │   │   │   ├── Campaigns.jsx    # Управление кампаниями
 │   │   │   └── Settings.jsx     # Настройки агента
 │   │   ├── components/
@@ -157,6 +164,7 @@ fitsiz-sales-agent/
 ├── scripts/
 │   ├── import_leads.py          # CLI-импорт лидов из CSV
 │   ├── setup_db.py              # Инициализация БД
+│   ├── test_email_parser.py     # Sanity-тесты парсера цитат
 │   └── deploy.sh                # Скрипт деплоя на VPS
 │
 ├── docker-compose.yml           # (опционально, для деплоя)
@@ -203,8 +211,8 @@ follow_up_3  → Финальный follow-up (14 дней)
 replied      → Ответил (любой ответ)
 interested   → Проявил интерес (запросил прайс, задал вопросы)
 negotiating  → Обсуждает условия (объёмы, доставку, сроки)
-warm         → Готов к работе ("давайте договор", "готовы заказать")
-transferred  → Передан менеджеру
+warm         → Готов к работе ("давайте договор", "готовы заказать") → триггер email-уведомления менеджеру
+transferred → Передан менеджеру
 rejected     → Отказ ("не интересно", "работаем с другими")
 unsubscribed → Попросил не писать
 ```
@@ -221,11 +229,13 @@ body_html       TEXT            # HTML-версия (опционально)
 attachments     JSON            # ["pricelist_2026.pdf", "catalog.pdf"]
 email_message_id VARCHAR(255)   # Message-ID заголовок
 in_reply_to     VARCHAR(255)    # In-Reply-To заголовок (для цепочек)
-status          ENUM            # draft, sent, delivered, read, bounced
+status          ENUM            # draft, queued, sent, delivered, read, bounced, received, failed
 ai_prompt_used  TEXT            # какой промпт использовался (для отладки)
 created_at      DATETIME
 sent_at         DATETIME
 ```
+
+> Отдельной таблицы `Conversation` нет. «Переписка» — это Message, сгруппированные по `lead_id`, порядок восстанавливается по email-заголовкам `in_reply_to` / `references`.
 
 ### 5.4. Campaign (Кампания)
 
@@ -277,7 +287,7 @@ IMAP: imap.mail.ru:993 (SSL)
 | Задержка ответа на входящие | 15-45 минут (рандом) |
 | Разогрев нового ящика | Первая неделя: 5 писем/день, потом +5 каждую неделю |
 | Обязательная подпись | Имя, должность, телефон, сайт |
-| Обязательный отказ | Ссылка "Отписаться" в каждом письме |
+| Обязательный отказ | Ссылка "Отписаться" в каждом письме + List-Unsubscribe заголовок |
 | Threading | In-Reply-To + References заголовки — ответы в одной цепочке |
 | Персонализация | Каждое письмо уникально (AI генерирует), не шаблон |
 
@@ -295,9 +305,36 @@ IMAP: imap.mail.ru:993 (SSL)
    c. Если отписка → статус unsubscribed, больше не писать
    d. Если отказ → статус rejected, больше не писать
    e. Если интерес/вопрос → сгенерировать ответ, приложить нужные документы
-   f. Если "давайте работать" / "готовы заказать" → статус warm, уведомление в Telegram
-4. Задержка 15-45 минут → отправка ответа
+   f. Если "давайте работать" / "готовы заказать" → статус warm,
+      **отправить email менеджеру на `MANAGER_EMAIL`** со сводкой по лиду,
+      последним сообщением клиента и ссылкой на переписку в дашборде
+4. Задержка 15-45 минут → отправка ответа клиенту
 ```
+
+### 6.4. Уведомления менеджеру (email)
+
+Триггер — переход лида в статус `warm` (классификация AI `intent=ready` или
+эвристика по переписке).
+
+**Что входит в письмо менеджеру:**
+- Компания, контактное лицо, email, телефон, город
+- Краткая сводка, что интересовало (по результату `qualifier`: оценка
+  интереса, готовность к покупке, прогноз объёма)
+- Последнее сообщение клиента (plain text, без цитат)
+- Deep-link в дашборд на `https://<host>/conversations/<lead_id>` для
+  просмотра всей переписки
+- Рекомендация AI по следующему шагу
+
+**Куда уходит:**
+- `MANAGER_EMAIL` в `.env` — основной получатель
+- `MANAGER_EMAIL_CC` (опционально) — список через запятую для копии
+  (например, руководителю отдела продаж)
+
+**Как отправляется:**
+- Переиспользуется `services/email_sender.py` — тот же SMTP-канал, что и для
+  писем клиентам, но отдельный шаблон (`prompts/manager_notification.md`).
+- Никаких мессенджеров, ботов, webhook'ов, внешних интеграций. Один канал —
+  SMTP. Одна инфраструктура.
 
 ---
 
@@ -403,6 +440,21 @@ Subject должен быть конкретный, без кликбейта.
 5. Нужно ли передать менеджеру? (да/нет)
 ```
 
+**Manager notification (письмо менеджеру о тёплом лиде):**
+```
+Контекст:
+- Профиль лида: {lead_profile}
+- Оценка qualifier: {qualifier_result}
+- Последнее сообщение клиента: {last_incoming}
+- Ссылка на переписку: {dashboard_link}
+
+Задача: собери короткое письмо для менеджера (не клиента!).
+Формат — деловой, без AI-стилистики, просто сводка:
+  Тема: [warm] Компания, Город — готов обсуждать
+  Тело: 4-6 строк — кто, что хотел, что важно знать, ссылка.
+Без "уважаемый менеджер" и пр. — это внутренняя коммуникация.
+```
+
 ---
 
 ## 8. Dashboard (UI)
@@ -435,12 +487,12 @@ Subject должен быть конкретный, без кликбейта.
 - Статистика кампании: отправлено, ответили, конверсия
 
 **Settings (настройки)**
-- Имя и подпись агента
-- Email-аккаунт (SMTP/IMAP)
-- Telegram-бот (токен, chat_id для уведомлений)
-- API-ключ Anthropic
-- Лимиты отправки
-- Расписание проверки почты
+- Тестовая отправка SMTP (видимая часть — всё остальное в `.env`)
+- Тестовое уведомление менеджеру (кнопка «Отправить тестовый warm-alert на `MANAGER_EMAIL`»)
+- Информационный блок: где лежат секреты, зачем не в БД
+
+> Редактирование `.env` через UI не реализовано осознанно: секреты хранятся
+> в файле, а не в базе — это снижает риск утечки и упрощает аудит.
 
 ### 8.2. Режим модерации (важно на старте)
 
@@ -458,7 +510,7 @@ Subject должен быть конкретный, без кликбейта.
 ## 9. Переменные окружения (.env)
 
 ```bash
-# Email
+# Email (почта FITSIZ, от имени которой агент пишет клиентам)
 EMAIL_ADDRESS=sales@fitsiz.ru
 EMAIL_PASSWORD=app_password_here
 SMTP_HOST=smtp.mail.ru
@@ -470,11 +522,12 @@ IMAP_PORT=993
 ANTHROPIC_API_KEY=sk-ant-xxxxx
 AI_MODEL=claude-sonnet-4-20250514
 
-# Telegram уведомления
-TELEGRAM_BOT_TOKEN=123456:ABCdef
-TELEGRAM_CHAT_ID=your_chat_id
+# Уведомления менеджеру (тёплые лиды)
+MANAGER_EMAIL=manager@fitsiz.ru
+MANAGER_NAME=Имя Менеджера             # опционально — подставляется в system prompt
+MANAGER_EMAIL_CC=                       # опционально — CC через запятую
 
-# Агент
+# Персона агента (подставляется в письма и подпись)
 AGENT_NAME=Владимир
 AGENT_TITLE=Менеджер по работе с партнёрами
 AGENT_PHONE=+7 (xxx) xxx-xx-xx
@@ -493,6 +546,9 @@ AUTO_SEND=false    # false = модерация, true = автоотправка
 
 # База данных
 DATABASE_URL=sqlite:///./data/fitsiz_agent.db
+
+# Публичный host (для ссылок в уведомлениях менеджеру)
+PUBLIC_BASE_URL=http://127.0.0.1:5173
 ```
 
 ---
@@ -506,17 +562,23 @@ POST   /api/leads                   # Создать лида вручную
 POST   /api/leads/import            # Импорт CSV/XLSX
 GET    /api/leads/{id}              # Детали лида
 PATCH  /api/leads/{id}              # Обновить лида
-POST   /api/leads/{id}/transfer     # Передать менеджеру
+POST   /api/leads/{id}/transfer     # Передать менеджеру (вручную)
 DELETE /api/leads/{id}              # Удалить лида
 ```
 
 ### Conversations
 ```
-GET    /api/conversations           # Список переписок
-GET    /api/conversations/{lead_id} # Переписка с лидом
-POST   /api/conversations/{lead_id}/approve  # Одобрить черновик
-POST   /api/conversations/{lead_id}/edit     # Редактировать черновик
-POST   /api/conversations/{lead_id}/send     # Отправить вручную
+GET    /api/conversations                          # Список переписок
+GET    /api/conversations/{lead_id}                # Переписка с лидом
+POST   /api/conversations/{lead_id}/draft-cold     # Сгенерировать cold-письмо
+POST   /api/conversations/{lead_id}/draft-reply    # Сгенерировать ответ на последнее входящее
+POST   /api/conversations/{lead_id}/draft-followup?stage=follow_up_1  # Follow-up
+POST   /api/conversations/{lead_id}/qualify        # Оценка лида
+POST   /api/conversations/{lead_id}/transfer       # Передать менеджеру
+PATCH  /api/conversations/messages/{id}            # Редактировать черновик
+POST   /api/conversations/messages/{id}/approve    # Черновик → queued
+POST   /api/conversations/messages/{id}/send       # Отправить сейчас
+DELETE /api/conversations/messages/{id}            # Удалить черновик
 ```
 
 ### Campaigns
@@ -541,12 +603,12 @@ POST   /api/documents               # Загрузить документ
 DELETE /api/documents/{id}          # Удалить документ
 ```
 
-### Settings
+### Email / система
 ```
-GET    /api/settings                # Текущие настройки
-PATCH  /api/settings                # Обновить настройки
-POST   /api/settings/test-email     # Тестовое письмо
-POST   /api/settings/test-telegram  # Тестовое уведомление
+GET    /api/email/quota             # Сколько писем ушло сегодня / лимит
+POST   /api/email/send-test         # Тестовое письмо (ручная проверка SMTP)
+POST   /api/email/check-inbox       # Ручной pull IMAP
+POST   /api/settings/test-manager-email  # Отправить тестовый warm-alert на MANAGER_EMAIL
 ```
 
 ---
@@ -562,7 +624,6 @@ POST   /api/settings/test-telegram  # Тестовое уведомление
 | Mail.ru для бизнеса | бесплатно (с доменом) |
 | Домен fitsiz.ru | уже есть |
 | GitHub (приватный репо) | бесплатно |
-| Telegram Bot API | бесплатно |
 | **Итого** | **~1 500 - 2 500 ₽/мес** |
 
 ### Расчёт расхода API
@@ -570,9 +631,12 @@ POST   /api/settings/test-telegram  # Тестовое уведомление
 Одно cold-письмо: ~1 000 токенов input (system prompt + контекст) + ~300 output = ~1 300 токенов
 Один ответ в диалоге: ~2 000 input (контекст + переписка) + ~500 output = ~2 500 токенов
 
+**Prompt caching** включён — system prompt (~27 KB знаний) кешируется на 5 минут,
+что снижает реальный input-cost примерно на 90% при пачках вызовов.
+
 При 100 лидах в месяц, ~3 сообщения на лида в среднем:
 - 100 × 1 300 (cold) + 200 × 2 500 (ответы) = 630 000 токенов
-- Claude Sonnet: ~$3/M input, ~$15/M output = ~$3-5/мес
+- Claude Sonnet: ~$3/M input, ~$15/M output → с учётом кеширования **~$3-5/мес**
 
 ---
 
@@ -581,48 +645,56 @@ POST   /api/settings/test-telegram  # Тестовое уведомление
 | Риск | Решение |
 |------|---------|
 | Утечка API-ключей | .env файл, .gitignore, никогда не в коде |
-| Спам-репутация домена | Лимиты, разогрев, SPF/DKIM/DMARC |
-| AI галлюцинации | Режим модерации, запрет на выдумку характеристик |
+| Спам-репутация домена | Лимиты, разогрев, SPF/DKIM/DMARC, List-Unsubscribe |
+| AI галлюцинации | Режим модерации, запрет на выдумку характеристик, forced tool_use для JSON |
 | Юнит-экономика в письмах | System prompt запрещает, проверка на ключевые слова |
-| Персональные данные | GDPR/152-ФЗ: кнопка "Отписаться", удаление по запросу |
+| Персональные данные | 152-ФЗ: кнопка "Отписаться", удаление по запросу |
 | Потеря данных | SQLite backup ежедневно, git для кода |
+| Перехват уведомлений менеджеру | TLS на SMTP, аккаунт `MANAGER_EMAIL` с 2FA |
 
 ---
 
 ## 13. Этапы разработки (roadmap)
 
-### Этап 1: Каркас (2-3 дня)
-- [ ] GitHub repo + .gitignore + README
-- [ ] Python-проект: FastAPI + SQLAlchemy + SQLite
-- [ ] Модели данных (Lead, Message, Campaign, Document)
-- [ ] Базовые API-эндпоинты (CRUD лидов)
-- [ ] Импорт CSV
+### Этап 1: Каркас (2-3 дня) — ✅ готово
+- [x] GitHub repo + .gitignore + README
+- [x] Python-проект: FastAPI + SQLAlchemy + SQLite
+- [x] Модели данных (Lead, Message, Campaign, Document)
+- [x] Базовые API-эндпоинты (CRUD лидов)
+- [x] Импорт CSV
 
-### Этап 2: Email-движок (2-3 дня)
-- [ ] SMTP отправка через Mail.ru (с вложениями)
-- [ ] IMAP чтение входящих
-- [ ] Матчинг входящих с лидами
-- [ ] Threading (In-Reply-To)
-- [ ] Антиспам: задержки, лимиты, рандомизация
+### Этап 2: Email-движок (2-3 дня) — ✅ готово
+- [x] SMTP отправка через Mail.ru (с вложениями, threading, List-Unsubscribe)
+- [x] IMAP чтение входящих
+- [x] Матчинг входящих с лидами
+- [x] Парсер цитат (RU/EN), автодетект автоответов
+- [x] Антиспам: задержки, лимиты, рандомизация
 
-### Этап 3: AI-мозг (3-4 дня)
-- [ ] System prompt агента (полная база знаний FITSIZ)
-- [ ] Генерация cold-писем
-- [ ] Обработка входящих ответов
-- [ ] Квалификация лидов
-- [ ] Follow-up цепочки
-- [ ] Режим модерации (черновики)
+### Этап 3: AI-мозг (3-4 дня) — ✅ готово
+- [x] System prompt агента (полная база знаний FITSIZ — 27 KB)
+- [x] Генерация cold-писем
+- [x] Обработка входящих ответов (intent + JSON через tool_use)
+- [x] Квалификация лидов
+- [x] Follow-up цепочки (шаблоны 3/7/14 дней)
+- [x] Режим модерации (черновики)
+- [x] Prompt caching (ephemeral)
 
-### Этап 4: Dashboard (3-4 дня)
-- [ ] React + Vite + shadcn/ui
-- [ ] Страница Dashboard (метрики)
-- [ ] Страница Leads (таблица + импорт)
-- [ ] Страница Conversations (переписки)
-- [ ] Страница Settings
+### Этап 4: Dashboard (3-4 дня) — ✅ готово
+- [x] React + Vite + Tailwind
+- [x] Страница Dashboard (метрики, воронка, квота)
+- [x] Страница Leads (таблица + импорт + фильтры)
+- [x] Страницы Conversations (список + детальный просмотр + модерация)
+- [x] Страница Settings (тест SMTP)
 
-### Этап 5: Автоматизация + деплой (2-3 дня)
-- [ ] APScheduler: проверка почты, follow-up, очередь отправки
-- [ ] Telegram-уведомления
+### Этап 5: Автоматизация + уведомления + деплой (2-3 дня) — текущий
+- [ ] APScheduler:
+  - [ ] IMAP-проверка каждые 10 минут
+  - [ ] Отправка queued-писем с антиспам-задержками
+  - [ ] Автогенерация follow-up по `next_action_at`
+- [ ] **Email-уведомления менеджеру** на `MANAGER_EMAIL` при warm-лиде
+  (сводка + ссылка на переписку в дашборде). Telegram — **убран из проекта**.
+- [ ] Тестовая кнопка «Отправить warm-alert менеджеру» в Settings
+- [ ] Deep-link из письма менеджеру в `/conversations/<id>`
 - [ ] Деплой на VPS (systemd + Caddy)
 - [ ] GitHub Actions CI/CD
 
@@ -649,37 +721,59 @@ company_name,contact_name,email,city,region,company_type,specialization,website,
 ### Первый запуск
 
 ```bash
-# 1. Клонировать пустой репозиторий
+# 1. Клонировать репозиторий
 git clone git@github.com:your-username/fitsiz-sales-agent.git
 cd fitsiz-sales-agent
 
-# 2. Запустить Claude Code
-claude
+# 2. Backend
+python3.11 -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env   # заполнить EMAIL_*, ANTHROPIC_API_KEY, MANAGER_EMAIL
+python -m scripts.setup_db
+python -m scripts.import_leads --file scripts/sample_leads.csv   # опционально
 
-# 3. Дать команду Claude Code:
-"Прочитай файл README.md в корне проекта. Это архитектура AI Sales Agent.
- Начни с Этапа 1: создай структуру проекта, модели данных, базовые API-эндпоинты.
- Используй Python, FastAPI, SQLAlchemy, SQLite. Коммить каждый логический блок."
+# 3. Frontend
+cd frontend && npm install && cd ..
+
+# 4. Запуск (в двух терминалах)
+./venv/bin/uvicorn backend.main:app --reload --port 8000
+npm run dev --prefix frontend
+# → http://localhost:5173
 ```
 
 ### Работа с Claude Code по этапам
 
-Для каждого этапа даёшь Claude Code конкретную задачу:
+Для каждого этапа даёшь Claude Code конкретную задачу. Примеры:
 
 ```
-"Этап 2: Реализуй email_sender.py и email_reader.py. 
- SMTP через Mail.ru (smtp.mail.ru:465 SSL). 
- IMAP через imapclient (imap.mail.ru:993 SSL).
- Отправка с вложениями PDF. Threading через In-Reply-To.
- Антиспам: рандомные задержки 3-7 минут между письмами."
+"Этап 5: реализуй scheduler.py на APScheduler.
+ Три джобы:
+ 1) каждые 10 минут — fetch_new_messages() из email_reader.
+ 2) каждые 30 минут — процессим queued-письма через email_sender,
+    соблюдая задержки 3-7 мин между cold-отправками.
+ 3) каждые 6 часов — ищем лидов без ответа с next_action_at <= now,
+    генерим follow-up через ai_engine, ставим status=draft или queued
+    в зависимости от AUTO_SEND.
+ Все джобы читают AUTO_SEND из .env: в модерации scheduler создаёт
+ только черновики, не отправляет."
 ```
 
 ```
-"Этап 3: Реализуй ai_engine.py. 
- Anthropic API, модель claude-sonnet-4-20250514.
- Прочитай промпты из backend/prompts/. 
- Прочитай знания из backend/knowledge/.
- Реализуй generate_cold_email(), handle_reply(), qualify_lead()."
+"Этап 5: реализуй services/manager_notifier.py.
+ Функция notify_warm_lead(lead, qualifier_result, last_incoming).
+ Собирает email по шаблону prompts/manager_notification.md.
+ Отправляет через email_sender.send_email на MANAGER_EMAIL с
+ опциональным CC из MANAGER_EMAIL_CC.
+ Deep-link = {PUBLIC_BASE_URL}/conversations/{lead.id}.
+ Вызывается автоматически из reply_handler, когда intent=ready
+ или is_warm=true. Дубли предотвращаем: если у лида уже был warm-alert
+ в последние 24 часа — не шлём повторный."
+```
+
+```
+"Этап 5: добавь в API /api/settings/test-manager-email POST-эндпоинт,
+ отправляет тестовое warm-alert письмо на MANAGER_EMAIL с фиктивными
+ данными лида. В Settings.jsx добавь кнопку 'Отправить тест менеджеру'."
 ```
 
 ---
