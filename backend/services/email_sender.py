@@ -27,7 +27,7 @@ from backend.config import BASE_DIR, settings
 DOCUMENTS_DIR = BASE_DIR / "documents"
 
 
-@dataclass(slots=True)
+@dataclass
 class SendResult:
     """Результат успешной SMTP-отправки."""
 

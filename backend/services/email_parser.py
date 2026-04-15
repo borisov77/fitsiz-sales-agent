@@ -13,7 +13,7 @@ from email.message import EmailMessage
 from email.utils import getaddresses, parseaddr
 
 
-@dataclass(slots=True)
+@dataclass
 class ParsedEmail:
     """Нормализованное представление входящего письма."""
 

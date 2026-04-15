@@ -20,7 +20,7 @@ from backend.models.message import Message, MessageDirection, MessageStatus
 from backend.services.email_parser import ParsedEmail, parse
 
 
-@dataclass(slots=True)
+@dataclass
 class FetchSummary:
     """Что случилось за один цикл проверки входящих."""
 
