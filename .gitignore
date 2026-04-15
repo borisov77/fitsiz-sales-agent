@@ -63,3 +63,6 @@ documents/*.docx
 *.pem
 *.key
 secrets/
+
+# Claude Code local user settings (но launch.json коммитим для всех)
+.claude/settings.local.json

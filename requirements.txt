@@ -9,6 +9,8 @@ alembic==1.13.3
 
 # --- Settings / env ---
 pydantic==2.9.2
+pydantic[email]==2.9.2
+email-validator==2.2.0
 pydantic-settings==2.5.2
 python-dotenv==1.0.1
 

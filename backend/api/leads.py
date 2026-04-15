@@ -117,10 +117,11 @@ def update_lead(
 
 
 @router.delete("/{lead_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_lead(lead_id: str, db: Annotated[Session, Depends(get_db)]) -> None:
+def delete_lead(lead_id: str, db: Annotated[Session, Depends(get_db)]):
     lead = _get_or_404(db, lead_id)
     db.delete(lead)
     db.commit()
+    return None
 
 
 @router.post("/{lead_id}/transfer", response_model=LeadRead)
