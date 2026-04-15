@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from backend.api import email as email_api
 from backend.api import leads
 from backend.config import settings
 from backend.database import init_db
@@ -40,6 +41,7 @@ def health() -> dict[str, str]:
 
 
 app.include_router(leads.router)
+app.include_router(email_api.router)
 
 
 if __name__ == "__main__":
