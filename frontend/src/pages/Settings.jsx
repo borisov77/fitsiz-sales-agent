@@ -30,6 +30,24 @@ export default function SettingsPage() {
     }
   }
 
+  const [mgrBusy, setMgrBusy] = useState(false)
+  const [mgrStatus, setMgrStatus] = useState(null)
+
+  const sendManagerTest = async () => {
+    setMgrBusy(true)
+    setMgrStatus(null)
+    try {
+      const res = await fetch('/api/email/test-manager-email', { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data?.detail || res.statusText)
+      setMgrStatus({ ok: true, msg: `Ушло. Message-ID: ${data.message_id}` })
+    } catch (e) {
+      setMgrStatus({ ok: false, msg: e.message })
+    } finally {
+      setMgrBusy(false)
+    }
+  }
+
   return (
     <div className="p-6 space-y-4">
       <h1 className="text-lg font-semibold">Настройки</h1>
@@ -81,6 +99,34 @@ export default function SettingsPage() {
                 }
               >
                 {status.msg}
+              </span>
+            )}
+          </div>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Тест уведомления менеджеру</CardTitle>
+        </CardHeader>
+        <CardBody className="space-y-2">
+          <p className="text-sm text-muted-foreground">
+            Отправляет тестовый warm-alert на адрес <code>MANAGER_EMAIL</code> из
+            <code>.env</code> — с фиктивным лидом. Проверяет, что менеджер
+            получает уведомления когда лид становится тёплым.
+          </p>
+          <div className="flex items-center gap-2">
+            <Button onClick={sendManagerTest} disabled={mgrBusy}>
+              {mgrBusy ? 'Отправка…' : 'Отправить тест менеджеру'}
+            </Button>
+            {mgrStatus && (
+              <span
+                className={
+                  'text-sm ' +
+                  (mgrStatus.ok ? 'text-emerald-700' : 'text-red-700')
+                }
+              >
+                {mgrStatus.msg}
               </span>
             )}
           </div>

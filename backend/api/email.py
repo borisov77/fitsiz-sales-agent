@@ -141,3 +141,23 @@ def check_inbox(
         saved_message_ids=summary.saved_messages,
         updated_lead_ids=summary.updated_leads,
     )
+
+
+# ==========================
+# Тестовое уведомление менеджеру
+# ==========================
+@router.post("/test-manager-email")
+def test_manager_email(db: Annotated[Session, Depends(get_db)]) -> dict[str, str]:
+    """Отправляет тестовый warm-alert на MANAGER_EMAIL с фиктивным лидом."""
+    from backend.services.manager_notifier import (
+        NotifierError,
+        send_test_manager_notification,
+    )
+
+    try:
+        message_id = send_test_manager_notification(db)
+    except NotifierError as exc:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY, detail=str(exc)
+        ) from exc
+    return {"status": "sent", "message_id": message_id}

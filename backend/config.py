@@ -31,9 +31,19 @@ class Settings(BaseSettings):
     anthropic_api_key: str = Field(default="", alias="ANTHROPIC_API_KEY")
     ai_model: str = Field(default="claude-sonnet-4-20250514", alias="AI_MODEL")
 
-    # --- Telegram ---
-    telegram_bot_token: str = Field(default="", alias="TELEGRAM_BOT_TOKEN")
-    telegram_chat_id: str = Field(default="", alias="TELEGRAM_CHAT_ID")
+    # --- Уведомления менеджеру (email) ---
+    manager_email: str = Field(default="", alias="MANAGER_EMAIL")
+    manager_name: str = Field(default="", alias="MANAGER_NAME")
+    manager_email_cc: str = Field(default="", alias="MANAGER_EMAIL_CC")
+    public_base_url: str = Field(
+        default="http://127.0.0.1:5173", alias="PUBLIC_BASE_URL"
+    )
+
+    @property
+    def manager_cc_list(self) -> list[str]:
+        if not self.manager_email_cc:
+            return []
+        return [e.strip() for e in self.manager_email_cc.split(",") if e.strip()]
 
     # --- Агент ---
     agent_name: str = Field(default="Владимир", alias="AGENT_NAME")

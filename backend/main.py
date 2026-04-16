@@ -15,9 +15,17 @@ from backend.database import init_db
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    import logging
+    logging.basicConfig(level=logging.INFO)
+
     # На старте — создаём таблицы если их нет (для dev/старт без Alembic)
     init_db()
+
+    # Запускаем фоновый планировщик (IMAP-check, send-queued, follow-up)
+    from backend.services.scheduler import start_scheduler, stop_scheduler
+    start_scheduler()
     yield
+    stop_scheduler()
 
 
 app = FastAPI(
