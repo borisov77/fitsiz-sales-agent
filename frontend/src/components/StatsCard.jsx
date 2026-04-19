@@ -1,8 +1,7 @@
 import { Card, CardBody } from './Card.jsx'
 import { cn } from '../lib/cn.js'
 
-// FITSIZ stats card — огромная цифра в Russo One, подпись в Inter uppercase.
-// Акцентный вариант — зелёный фон с чёрным текстом.
+// FITSIZ stats card — гигантская цифра в Russo One, подпись в Inter uppercase.
 
 export function StatsCard({ label, value, hint, tone = 'default', icon: Icon }) {
   const variant =
@@ -15,7 +14,7 @@ export function StatsCard({ label, value, hint, tone = 'default', icon: Icon }) 
 
   const valueTone =
     variant !== 'default'
-      ? '' // акцентные — чёрный текст из карточки
+      ? ''
       : tone === 'warn'
       ? 'text-fitsiz-lime'
       : tone === 'ok'
@@ -30,7 +29,7 @@ export function StatsCard({ label, value, hint, tone = 'default', icon: Icon }) 
         <div className="flex items-start justify-between gap-3">
           <div
             className={cn(
-              'text-[11px] font-bold uppercase tracking-badge',
+              'text-[12px] font-bold uppercase tracking-badge',
               labelColor,
             )}
           >
@@ -38,23 +37,25 @@ export function StatsCard({ label, value, hint, tone = 'default', icon: Icon }) 
           </div>
           {Icon ? (
             <Icon
-              size={18}
+              size={20}
               className={
-                variant === 'default' ? 'text-fitsiz-muted' : 'text-fitsiz-black/70'
+                variant === 'default'
+                  ? 'text-fitsiz-muted'
+                  : 'text-fitsiz-black/70'
               }
             />
           ) : null}
         </div>
         <div
           className={cn(
-            'mt-3 font-heading text-5xl leading-none tracking-heading',
+            'mt-4 font-heading text-[64px] leading-none tracking-heading',
             valueTone,
           )}
         >
           {value}
         </div>
         {hint ? (
-          <div className={cn('mt-2 text-xs', hintColor)}>{hint}</div>
+          <div className={cn('mt-3 text-[13px]', hintColor)}>{hint}</div>
         ) : null}
       </CardBody>
     </Card>

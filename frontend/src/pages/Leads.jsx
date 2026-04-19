@@ -7,6 +7,7 @@ import { Button } from '../components/Button.jsx'
 import { Input, Select } from '../components/Input.jsx'
 import { Badge } from '../components/Badge.jsx'
 import { ImportModal } from '../components/ImportModal.jsx'
+import { PageHeader } from '../components/PageHeader.jsx'
 
 const STATUSES = [
   '',
@@ -35,7 +36,10 @@ export default function Leads() {
   const load = async () => {
     setErr(null)
     try {
-      const list = await api.leadsList({ status: status || undefined, limit: 500 })
+      const list = await api.leadsList({
+        status: status || undefined,
+        limit: 500,
+      })
       setRows(list || [])
     } catch (e) {
       setErr(e.message)
@@ -71,25 +75,25 @@ export default function Leads() {
   }
 
   return (
-    <div className="p-8">
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <div className="font-body text-[11px] font-bold uppercase tracking-badge text-fitsiz-muted">
-            База
-          </div>
-          <h1 className="mt-1 font-heading text-3xl">Лиды</h1>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setImportOpen(true)}>
-            <Upload size={14} /> Импорт
-          </Button>
-          <Button variant="primary" disabled>
-            <Plus size={14} /> Добавить
-          </Button>
-        </div>
-      </div>
+    <div className="p-10">
+      <PageHeader
+        chip="база"
+        title="Лиды"
+        accent="ды"
+        description="Потенциальные партнёры FITSIZ. Импортируй CSV или XLSX, запусти cold-письмо по одному клику."
+        actions={
+          <>
+            <Button variant="outline" size="md" onClick={() => setImportOpen(true)}>
+              <Upload size={14} /> Импорт
+            </Button>
+            <Button variant="primary" size="md" disabled>
+              <Plus size={14} /> Добавить
+            </Button>
+          </>
+        }
+      />
 
-      <div className="mb-4 flex flex-wrap items-center gap-3">
+      <div className="mb-5 flex flex-wrap items-center gap-3">
         <Input
           placeholder="Поиск: компания, email, город, контакт"
           value={search}
@@ -99,7 +103,7 @@ export default function Leads() {
         <Select
           value={status}
           onChange={(e) => setStatus(e.target.value)}
-          className="max-w-52"
+          className="max-w-56"
         >
           {STATUSES.map((s) => (
             <option key={s} value={s}>
@@ -107,13 +111,15 @@ export default function Leads() {
             </option>
           ))}
         </Select>
-        <div className="ml-auto text-[10px] uppercase tracking-badge text-fitsiz-muted">
-          Показано: <span className="text-fitsiz-white font-bold">{filtered.length}</span> / {rows.length}
+        <div className="ml-auto text-[12px] uppercase tracking-badge text-fitsiz-muted">
+          Показано:{' '}
+          <span className="text-fitsiz-white font-bold">{filtered.length}</span>{' '}
+          / {rows.length}
         </div>
       </div>
 
       {err && (
-        <div className="mb-4 rounded-chip border border-red-500/30 bg-red-900/20 p-3 text-sm text-red-300">
+        <div className="mb-5 rounded-chip border border-red-500/30 bg-red-900/20 p-4 text-[14px] text-red-300">
           {err}
         </div>
       )}
@@ -121,16 +127,16 @@ export default function Leads() {
       <Card>
         <CardBody className="p-0">
           <div className="overflow-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-fitsiz-black/40 text-[10px] uppercase tracking-badge text-fitsiz-muted">
+            <table className="w-full text-[14px]">
+              <thead className="bg-fitsiz-black/40 text-[11px] uppercase tracking-badge text-fitsiz-muted">
                 <tr>
-                  <th className="px-6 py-3 text-left font-bold">Компания</th>
-                  <th className="px-6 py-3 text-left font-bold">Контакт</th>
-                  <th className="px-6 py-3 text-left font-bold">Email</th>
-                  <th className="px-6 py-3 text-left font-bold">Город</th>
-                  <th className="px-6 py-3 text-left font-bold">Статус</th>
-                  <th className="px-6 py-3 text-left font-bold">Тип</th>
-                  <th className="px-6 py-3 text-right font-bold">Действия</th>
+                  <th className="px-6 py-4 text-left font-bold">Компания</th>
+                  <th className="px-6 py-4 text-left font-bold">Контакт</th>
+                  <th className="px-6 py-4 text-left font-bold">Email</th>
+                  <th className="px-6 py-4 text-left font-bold">Город</th>
+                  <th className="px-6 py-4 text-left font-bold">Статус</th>
+                  <th className="px-6 py-4 text-left font-bold">Тип</th>
+                  <th className="px-6 py-4 text-right font-bold">Действия</th>
                 </tr>
               </thead>
               <tbody>
@@ -139,7 +145,7 @@ export default function Leads() {
                     key={r.id}
                     className="border-t border-fitsiz-border hover:bg-fitsiz-black/30 transition-colors"
                   >
-                    <td className="px-6 py-3 font-semibold text-fitsiz-white">
+                    <td className="px-6 py-4 font-semibold text-fitsiz-white">
                       <Link
                         to={`/conversations/${r.id}`}
                         className="hover:text-fitsiz-green transition-colors"
@@ -147,18 +153,22 @@ export default function Leads() {
                         {r.company_name}
                       </Link>
                     </td>
-                    <td className="px-6 py-3 text-fitsiz-muted-light">
+                    <td className="px-6 py-4 text-fitsiz-muted-light">
                       {r.contact_name || '—'}
                     </td>
-                    <td className="px-6 py-3 text-fitsiz-muted-light">{r.email}</td>
-                    <td className="px-6 py-3 text-fitsiz-muted-light">
+                    <td className="px-6 py-4 text-fitsiz-muted-light">
+                      {r.email}
+                    </td>
+                    <td className="px-6 py-4 text-fitsiz-muted-light">
                       {r.city || '—'}
                     </td>
-                    <td className="px-6 py-3">
+                    <td className="px-6 py-4">
                       <Badge variant={r.status}>{r.status}</Badge>
                     </td>
-                    <td className="px-6 py-3 text-fitsiz-muted">{r.company_type}</td>
-                    <td className="px-6 py-3 text-right">
+                    <td className="px-6 py-4 text-fitsiz-muted">
+                      {r.company_type}
+                    </td>
+                    <td className="px-6 py-4 text-right">
                       <div className="inline-flex gap-2">
                         <Button
                           variant="primary"
@@ -182,7 +192,7 @@ export default function Leads() {
                   <tr>
                     <td
                       colSpan={7}
-                      className="px-6 py-12 text-center text-sm text-fitsiz-muted"
+                      className="px-6 py-16 text-center text-[15px] text-fitsiz-muted"
                     >
                       Ничего не найдено. Импортируйте CSV с лидами.
                     </td>

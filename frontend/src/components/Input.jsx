@@ -1,6 +1,6 @@
 import { cn } from '../lib/cn.js'
 
-// FITSIZ inputs — dark surface, зелёная фокусная окантовка.
+// FITSIZ inputs — крупнее, зелёный фокус-кольцо, радиус chip 16px.
 
 const baseField =
   'w-full bg-fitsiz-surface-1 text-fitsiz-white placeholder:text-fitsiz-muted ' +
@@ -12,7 +12,7 @@ const baseField =
 export function Input({ className, ...props }) {
   return (
     <input
-      className={cn(baseField, 'h-10 px-4 py-1 text-sm', className)}
+      className={cn(baseField, 'h-12 px-5 py-1 text-[15px]', className)}
       {...props}
     />
   )
@@ -21,7 +21,11 @@ export function Input({ className, ...props }) {
 export function Textarea({ className, ...props }) {
   return (
     <textarea
-      className={cn(baseField, 'px-4 py-3 text-sm leading-relaxed', className)}
+      className={cn(
+        baseField,
+        'px-5 py-4 text-[15px] leading-relaxed',
+        className,
+      )}
       {...props}
     />
   )
@@ -30,7 +34,7 @@ export function Textarea({ className, ...props }) {
 export function Select({ className, children, ...props }) {
   return (
     <select
-      className={cn(baseField, 'h-10 px-4 py-1 text-sm', className)}
+      className={cn(baseField, 'h-12 px-5 py-1 text-[15px]', className)}
       {...props}
     >
       {children}

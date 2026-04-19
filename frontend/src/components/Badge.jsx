@@ -1,9 +1,6 @@
 import { cn } from '../lib/cn.js'
 
-// FITSIZ badge — pill, uppercase, 6px/12px padding.
-// Цвета распределены по смыслу (не только бренд-палитра): статусы воронки
-// нужно различать, поэтому для «нейтральных» состояний используем
-// оттенки surface, а зелёный — только для ключевых «хороших» событий.
+// FITSIZ badge — pill, uppercase, чуть крупнее для читабельности.
 
 const statusClasses = {
   // Воронка — нейтральные/в работе
@@ -35,8 +32,8 @@ export function Badge({ variant, children, className }) {
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 rounded-pill px-2.5 py-[3px]',
-        'font-body text-[10px] font-bold uppercase tracking-badge',
+        'inline-flex items-center gap-1 rounded-pill px-3 py-1',
+        'font-body text-[12px] font-bold uppercase tracking-badge',
         tone,
         className,
       )}

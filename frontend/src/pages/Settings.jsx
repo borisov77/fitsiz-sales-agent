@@ -3,6 +3,7 @@ import { FileKey2, Send, UserCheck } from 'lucide-react'
 import { Card, CardBody, CardHeader, CardTitle } from '../components/Card.jsx'
 import { Button } from '../components/Button.jsx'
 import { Input, Textarea } from '../components/Input.jsx'
+import { PageHeader } from '../components/PageHeader.jsx'
 import { api } from '../lib/api.js'
 
 export default function SettingsPage() {
@@ -51,38 +52,33 @@ export default function SettingsPage() {
     }
   }
 
+  const code = 'rounded-chip bg-fitsiz-surface-2 px-2 py-0.5 font-mono text-[12px] text-fitsiz-lime'
+
   return (
-    <div className="p-8 space-y-5">
-      <div>
-        <div className="font-body text-[11px] font-bold uppercase tracking-badge text-fitsiz-muted">
-          Конфигурация
-        </div>
-        <h1 className="mt-1 font-heading text-3xl">Настройки</h1>
-      </div>
+    <div className="p-10 space-y-6">
+      <PageHeader
+        chip="конфигурация"
+        title="Настройки"
+        accent="ройки"
+        description="Параметры агента в .env. Здесь — только тестовая отправка, чтобы проверить, что всё работает."
+      />
 
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <FileKey2 size={14} className="text-fitsiz-green" />
+            <FileKey2 size={16} className="text-fitsiz-green" />
             Источник истины
           </CardTitle>
         </CardHeader>
-        <CardBody className="space-y-3 text-sm text-fitsiz-muted-light">
+        <CardBody className="space-y-4 text-[15px] text-fitsiz-muted-light leading-relaxed">
           <p>
             Все ключевые параметры (SMTP/IMAP, Anthropic API-ключ, имя агента,
-            лимиты, режим{' '}
-            <code className="rounded-chip bg-fitsiz-surface-2 px-2 py-0.5 font-mono text-xs text-fitsiz-lime">
-              AUTO_SEND
-            </code>
-            ) берутся из файла{' '}
-            <code className="rounded-chip bg-fitsiz-surface-2 px-2 py-0.5 font-mono text-xs text-fitsiz-lime">
-              .env
-            </code>{' '}
-            в корне проекта. Редактирование через UI не реализовано — это
-            осознанный выбор: секреты лежат в файле, не в БД.
+            лимиты, режим <code className={code}>AUTO_SEND</code>) берутся из
+            файла <code className={code}>.env</code> в корне проекта. Редактирование через UI не реализовано — это осознанный выбор: секреты лежат в файле, не в БД.
           </p>
           <p>
-            Чтобы поменять настройки — отредактируй <code className="rounded-chip bg-fitsiz-surface-2 px-2 py-0.5 font-mono text-xs text-fitsiz-lime">.env</code> и перезапусти backend.
+            Чтобы поменять настройки — отредактируй{' '}
+            <code className={code}>.env</code> и перезапусти backend.
           </p>
         </CardBody>
       </Card>
@@ -90,11 +86,11 @@ export default function SettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Send size={14} className="text-fitsiz-green" />
+            <Send size={16} className="text-fitsiz-green" />
             Тестовая отправка SMTP
           </CardTitle>
         </CardHeader>
-        <CardBody className="space-y-3">
+        <CardBody className="space-y-4">
           <Input
             type="email"
             placeholder="куда отправить, например you@mail.ru"
@@ -111,14 +107,14 @@ export default function SettingsPage() {
             value={body}
             onChange={(e) => setBody(e.target.value)}
           />
-          <div className="flex items-center gap-3">
-            <Button variant="primary" onClick={send} disabled={busy}>
+          <div className="flex items-center gap-4 flex-wrap">
+            <Button variant="primary" size="md" onClick={send} disabled={busy}>
               {busy ? 'Отправка…' : 'Отправить тест'}
             </Button>
             {status && (
               <span
                 className={
-                  'text-xs ' +
+                  'text-[14px] ' +
                   (status.ok ? 'text-fitsiz-green' : 'text-red-400')
                 }
               >
@@ -132,26 +128,26 @@ export default function SettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <UserCheck size={14} className="text-fitsiz-green" />
+            <UserCheck size={16} className="text-fitsiz-green" />
             Тест уведомления менеджеру
           </CardTitle>
         </CardHeader>
-        <CardBody className="space-y-3">
-          <p className="text-sm text-fitsiz-muted-light">
+        <CardBody className="space-y-4">
+          <p className="text-[15px] text-fitsiz-muted-light leading-relaxed">
             Отправляет тестовый warm-alert на адрес{' '}
-            <code className="rounded-chip bg-fitsiz-surface-2 px-2 py-0.5 font-mono text-xs text-fitsiz-lime">
-              MANAGER_EMAIL
-            </code>{' '}
-            из <code className="rounded-chip bg-fitsiz-surface-2 px-2 py-0.5 font-mono text-xs text-fitsiz-lime">.env</code> — с фиктивным лидом. Проверяет, что менеджер получает уведомления, когда лид становится тёплым.
+            <code className={code}>MANAGER_EMAIL</code> из{' '}
+            <code className={code}>.env</code> — с фиктивным лидом.
+            Проверяет, что менеджер получает уведомления, когда лид
+            становится тёплым.
           </p>
-          <div className="flex items-center gap-3">
-            <Button variant="primary" onClick={sendManagerTest} disabled={mgrBusy}>
+          <div className="flex items-center gap-4 flex-wrap">
+            <Button variant="primary" size="md" onClick={sendManagerTest} disabled={mgrBusy}>
               {mgrBusy ? 'Отправка…' : 'Отправить тест менеджеру'}
             </Button>
             {mgrStatus && (
               <span
                 className={
-                  'text-xs ' +
+                  'text-[14px] ' +
                   (mgrStatus.ok ? 'text-fitsiz-green' : 'text-red-400')
                 }
               >

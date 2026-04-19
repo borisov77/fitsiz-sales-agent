@@ -1,7 +1,6 @@
 import { cn } from '../lib/cn.js'
 
-// FITSIZ button — pill, uppercase, green primary.
-// Размер sm — это базовый pill, md/lg — крупнее для ключевых CTA.
+// FITSIZ button — pill, uppercase, крупнее и читаемее (по брендбуку).
 
 const base =
   'inline-flex items-center justify-center gap-2 font-bold uppercase tracking-cta ' +
@@ -18,7 +17,6 @@ const variants = {
   ghost:
     'bg-transparent text-fitsiz-white ring-[1.5px] ring-inset ring-fitsiz-white ' +
     'hover:bg-fitsiz-white hover:text-fitsiz-black',
-  // secondary — тёмный вариант без обводки, для второстепенных действий
   secondary:
     'bg-fitsiz-surface-2 text-fitsiz-white hover:bg-fitsiz-surface-3',
   outline:
@@ -29,10 +27,10 @@ const variants = {
 }
 
 const sizes = {
-  xs: 'h-7 px-3 text-[11px]',
-  sm: 'h-8 px-4 text-[12px]',
-  md: 'h-10 px-5 text-[13px]',
-  lg: 'h-12 px-7 text-[14px]',
+  xs: 'h-8 px-3.5 text-[12px]',
+  sm: 'h-10 px-5 text-[13px]',
+  md: 'h-12 px-6 text-[14px]',
+  lg: 'h-14 px-8 text-[15px]',
 }
 
 export function Button({
