@@ -83,8 +83,8 @@ export default function Conversations() {
                         <div className="truncate text-[16px] font-semibold text-fitsiz-white group-hover:text-fitsiz-green transition-colors">
                           {r.lead_company}
                         </div>
-                        <Badge variant={r.lead_status}>{r.lead_status}</Badge>
-                        {r.has_draft && <Badge variant="draft">черновик</Badge>}
+                        <Badge variant={r.lead_status} />
+                        {r.has_draft && <Badge variant="draft" />}
                       </div>
                       <div className="mt-1 truncate text-[13px] text-fitsiz-muted">
                         {r.lead_email}

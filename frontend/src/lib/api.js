@@ -85,4 +85,13 @@ export const api = {
   emailCheckInbox: () => request('/api/email/check-inbox', { method: 'POST' }),
   emailSendTest: (payload) =>
     request('/api/email/send-test', { method: 'POST', body: payload }),
+  emailTestManager: () =>
+    request('/api/email/test-manager-email', { method: 'POST' }),
+  emailSetLimit: (dailyLimit) =>
+    request('/api/email/limits', {
+      method: 'PATCH',
+      body: { daily_limit: dailyLimit },
+    }),
+  emailResetLimit: () =>
+    request('/api/email/limits/reset', { method: 'POST' }),
 }

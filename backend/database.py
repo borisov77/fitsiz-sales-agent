@@ -52,6 +52,12 @@ def get_db() -> Generator[Session, None, None]:
 def init_db() -> None:
     """Создаёт все таблицы (для старта без Alembic)."""
     # Импорт моделей нужен, чтобы они зарегистрировались в Base.metadata
-    from backend.models import lead, message, campaign, document  # noqa: F401
+    from backend.models import (  # noqa: F401
+        app_setting,
+        campaign,
+        document,
+        lead,
+        message,
+    )
 
     Base.metadata.create_all(bind=engine)

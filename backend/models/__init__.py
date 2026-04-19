@@ -1,4 +1,5 @@
 """SQLAlchemy-модели FITSIZ Sales Agent."""
+from backend.models.app_setting import AppSetting
 from backend.models.campaign import Campaign, CampaignStatus
 from backend.models.document import Document, DocumentType
 from backend.models.lead import CompanyType, Lead, LeadStatus
@@ -15,4 +16,5 @@ __all__ = [
     "CampaignStatus",
     "Document",
     "DocumentType",
+    "AppSetting",
 ]

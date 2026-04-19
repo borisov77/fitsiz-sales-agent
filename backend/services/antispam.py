@@ -55,21 +55,30 @@ def count_outgoing_sent_today(db: Session, now: datetime | None = None) -> int:
     return int(db.execute(stmt).scalar_one() or 0)
 
 
+def _effective_limit(db: Session, override: int | None = None) -> int:
+    """Берёт лимит из override, если передан; иначе — из БД/ .env."""
+    if override is not None:
+        return override
+    # Ленивый импорт, чтобы не было циклов
+    from backend.services.app_settings import get_daily_limit
+
+    return get_daily_limit(db)
+
+
 def under_daily_limit(
     db: Session, limit: int | None = None, now: datetime | None = None
 ) -> bool:
     """True, если можно отправить ещё одно cold-письмо сегодня."""
-    effective_limit = limit if limit is not None else settings.max_cold_emails_per_day
-    return count_outgoing_sent_today(db, now=now) < effective_limit
+    return count_outgoing_sent_today(db, now=now) < _effective_limit(db, limit)
 
 
 def remaining_daily_quota(
     db: Session, limit: int | None = None, now: datetime | None = None
 ) -> int:
     """Сколько ещё писем можно отправить сегодня."""
-    effective_limit = limit if limit is not None else settings.max_cold_emails_per_day
+    effective = _effective_limit(db, limit)
     sent = count_outgoing_sent_today(db, now=now)
-    return max(0, effective_limit - sent)
+    return max(0, effective - sent)
 
 
 # ==========================

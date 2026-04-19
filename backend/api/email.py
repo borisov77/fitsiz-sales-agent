@@ -42,6 +42,12 @@ class QuotaResponse(BaseModel):
     sent_today: int
     daily_limit: int
     remaining: int
+    env_default: int          # значение из .env (для сравнения)
+    has_override: bool        # True = лимит переопределён из UI
+
+
+class LimitUpdate(BaseModel):
+    daily_limit: int = Field(ge=0, le=10_000)
 
 
 class FetchInboxResponse(BaseModel):
@@ -101,19 +107,46 @@ def send_test(
 
 
 # ==========================
-# Квота на сегодня
+# Квота на сегодня + управление лимитом
 # ==========================
 @router.get("/quota", response_model=QuotaResponse)
 def get_quota(db: Annotated[Session, Depends(get_db)]) -> QuotaResponse:
     from backend.config import settings
+    from backend.services.app_settings import (
+        get_daily_limit,
+        has_daily_limit_override,
+    )
 
+    current_limit = get_daily_limit(db)
     sent = antispam.count_outgoing_sent_today(db)
-    remaining = antispam.remaining_daily_quota(db)
     return QuotaResponse(
         sent_today=sent,
-        daily_limit=settings.max_cold_emails_per_day,
-        remaining=remaining,
+        daily_limit=current_limit,
+        remaining=max(0, current_limit - sent),
+        env_default=settings.max_cold_emails_per_day,
+        has_override=has_daily_limit_override(db),
     )
+
+
+@router.patch("/limits", response_model=QuotaResponse)
+def update_limit(
+    payload: LimitUpdate,
+    db: Annotated[Session, Depends(get_db)],
+) -> QuotaResponse:
+    """Установить новый дневной лимит. Сохраняется в БД — переживёт рестарт."""
+    from backend.services.app_settings import set_daily_limit
+
+    set_daily_limit(db, payload.daily_limit)
+    return get_quota(db)
+
+
+@router.post("/limits/reset", response_model=QuotaResponse)
+def reset_limit(db: Annotated[Session, Depends(get_db)]) -> QuotaResponse:
+    """Удалить override — вернуться к значению из .env."""
+    from backend.services.app_settings import reset_daily_limit
+
+    reset_daily_limit(db)
+    return get_quota(db)
 
 
 # ==========================

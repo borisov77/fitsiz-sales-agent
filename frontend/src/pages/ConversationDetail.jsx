@@ -19,6 +19,7 @@ import { Card, CardBody } from '../components/Card.jsx'
 import { Button } from '../components/Button.jsx'
 import { Input, Textarea } from '../components/Input.jsx'
 import { Badge } from '../components/Badge.jsx'
+import { FOLLOW_UP_STAGE_RU, volumeLabel } from '../lib/labels.js'
 
 function MessageBubble({ m, onEdit, onApprove, onSend, onDelete }) {
   const [editing, setEditing] = useState(false)
@@ -61,7 +62,7 @@ function MessageBubble({ m, onEdit, onApprove, onSend, onDelete }) {
             <span className="font-bold text-fitsiz-white">Клиент → FITSIZ</span>
           </>
         )}
-        <Badge variant={m.status}>{m.status}</Badge>
+        <Badge variant={m.status} />
         <Clock size={12} />
         <span className="normal-case tracking-normal">
           {new Date(m.sent_at || m.created_at).toLocaleString('ru-RU')}
@@ -248,7 +249,7 @@ export default function ConversationDetail() {
             to="/conversations"
             className="mb-3 inline-flex items-center gap-2 text-[12px] uppercase tracking-badge text-fitsiz-muted hover:text-fitsiz-white transition-colors"
           >
-            <ArrowLeft size={14} /> К переpiскам
+            <ArrowLeft size={14} /> К перепискам
           </Link>
           <h1 className="page-title">{data.lead_company}</h1>
           <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -296,7 +297,7 @@ export default function ConversationDetail() {
             disabled={busy === `fu:${s}`}
           >
             <Sparkles size={13} />{' '}
-            {busy === `fu:${s}` ? '…' : s.replace('_', ' ')}
+            {busy === `fu:${s}` ? '…' : FOLLOW_UP_STAGE_RU[s]}
           </Button>
         ))}
         <Button variant="outline" size="sm" onClick={qualify} disabled={busy === 'qualify'}>
@@ -335,7 +336,7 @@ export default function ConversationDetail() {
               </div>
               <div>
                 <div className="font-heading text-[32px] leading-none">
-                  {qualifier.estimated_volume}
+                  {volumeLabel(qualifier.estimated_volume)}
                 </div>
                 <div className="mt-2 text-[11px] uppercase tracking-badge text-fitsiz-black/70">
                   Объём

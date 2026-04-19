@@ -39,11 +39,7 @@ export default function SettingsPage() {
     setMgrBusy(true)
     setMgrStatus(null)
     try {
-      const res = await fetch('/api/email/test-manager-email', {
-        method: 'POST',
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data?.detail || res.statusText)
+      const data = await api.emailTestManager()
       setMgrStatus({ ok: true, msg: `Ушло. Message-ID: ${data.message_id}` })
     } catch (e) {
       setMgrStatus({ ok: false, msg: e.message })

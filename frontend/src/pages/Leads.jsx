@@ -8,6 +8,7 @@ import { Input, Select } from '../components/Input.jsx'
 import { Badge } from '../components/Badge.jsx'
 import { ImportModal } from '../components/ImportModal.jsx'
 import { PageHeader } from '../components/PageHeader.jsx'
+import { LEAD_STATUS_RU, COMPANY_TYPE_RU } from '../lib/labels.js'
 
 const STATUSES = [
   '',
@@ -107,7 +108,7 @@ export default function Leads() {
         >
           {STATUSES.map((s) => (
             <option key={s} value={s}>
-              {s || 'все статусы'}
+              {s ? LEAD_STATUS_RU[s] : 'все статусы'}
             </option>
           ))}
         </Select>
@@ -163,10 +164,10 @@ export default function Leads() {
                       {r.city || '—'}
                     </td>
                     <td className="px-6 py-4">
-                      <Badge variant={r.status}>{r.status}</Badge>
+                      <Badge variant={r.status} />
                     </td>
                     <td className="px-6 py-4 text-fitsiz-muted">
-                      {r.company_type}
+                      {COMPANY_TYPE_RU[r.company_type] || r.company_type}
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="inline-flex gap-2">

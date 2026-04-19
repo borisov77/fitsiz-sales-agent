@@ -1,6 +1,12 @@
 import { cn } from '../lib/cn.js'
+import {
+  LEAD_STATUS_RU,
+  MESSAGE_STATUS_RU,
+} from '../lib/labels.js'
 
 // FITSIZ badge — pill, uppercase, чуть крупнее для читабельности.
+// Если variant совпадает со статусом лида или сообщения — подставим
+// русскую подпись. `children` override'ит всё.
 
 const statusClasses = {
   // Воронка — нейтральные/в работе
@@ -29,6 +35,8 @@ const statusClasses = {
 
 export function Badge({ variant, children, className }) {
   const tone = statusClasses[variant] || 'bg-fitsiz-surface-2 text-fitsiz-white'
+  const ruLabel =
+    LEAD_STATUS_RU[variant] ?? MESSAGE_STATUS_RU[variant] ?? variant
   return (
     <span
       className={cn(
@@ -38,7 +46,7 @@ export function Badge({ variant, children, className }) {
         className,
       )}
     >
-      {children || variant}
+      {children || ruLabel}
     </span>
   )
 }
