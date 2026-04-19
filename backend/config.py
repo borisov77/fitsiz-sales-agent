@@ -2,11 +2,16 @@
 from functools import lru_cache
 from pathlib import Path
 
+from dotenv import load_dotenv
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Явно перезаписываем shell-окружение значениями из .env:
+# иначе пустая shell-переменная (например ANTHROPIC_API_KEY='') перебивает .env.
+load_dotenv(BASE_DIR / ".env", override=True)
 
 
 class Settings(BaseSettings):
