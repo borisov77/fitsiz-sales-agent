@@ -1,9 +1,16 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
+import {
+  Users,
+  Flame,
+  ClipboardCheck,
+  Activity,
+  MessageSquareWarning,
+} from 'lucide-react'
 import { api } from '../lib/api.js'
 import { StatsCard } from '../components/StatsCard.jsx'
 import { Card, CardBody, CardHeader, CardTitle } from '../components/Card.jsx'
 import { Badge } from '../components/Badge.jsx'
-import { Link } from 'react-router-dom'
 
 const FUNNEL_ORDER = [
   'new',
@@ -27,7 +34,7 @@ export default function Dashboard() {
   const [err, setErr] = useState(null)
 
   useEffect(() => {
-    async function load() {
+    ;(async () => {
       try {
         const [l, q, c] = await Promise.all([
           api.leadsList({ limit: 1000 }),
@@ -40,8 +47,7 @@ export default function Dashboard() {
       } catch (e) {
         setErr(e.message)
       }
-    }
-    load()
+    })()
   }, [])
 
   const counts = FUNNEL_ORDER.reduce((acc, s) => {
@@ -58,28 +64,49 @@ export default function Dashboard() {
     counts.negotiating
   const warmCount = counts.warm || 0
   const transferred = counts.transferred || 0
-
   const withDrafts = conv.filter((c) => c.has_draft)
 
   return (
-    <div className="p-6">
-      <h1 className="mb-4 text-lg font-semibold">Dashboard</h1>
+    <div className="p-8">
+      <div className="mb-6 flex items-end justify-between">
+        <div>
+          <div className="font-body text-[11px] font-bold uppercase tracking-badge text-fitsiz-muted">
+            FITSIZ · Sales Agent
+          </div>
+          <h1 className="mt-1 font-heading text-3xl">Обзор</h1>
+        </div>
+      </div>
+
       {err && (
-        <div className="mb-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+        <div className="mb-4 rounded-chip border border-red-500/30 bg-red-900/20 p-3 text-sm text-red-300">
           Ошибка API: {err}
         </div>
       )}
+
+      {/* Метрики */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatsCard label="Всего лидов" value={leads.length} />
-        <StatsCard label="В работе" value={activeCount} hint="contacted → negotiating" />
-        <StatsCard label="Тёплые" value={warmCount} tone={warmCount ? 'warn' : undefined} />
+        <StatsCard label="Всего лидов" value={leads.length} icon={Users} />
+        <StatsCard
+          label="В работе"
+          value={activeCount}
+          hint="contacted → negotiating"
+          icon={Activity}
+        />
+        <StatsCard
+          label="Тёплые"
+          value={warmCount}
+          tone={warmCount ? 'accent' : 'default'}
+          icon={Flame}
+        />
         <StatsCard
           label="Передано менеджеру"
           value={transferred}
-          tone={transferred ? 'ok' : undefined}
+          tone={transferred ? 'lime' : 'default'}
+          icon={ClipboardCheck}
         />
       </div>
 
+      {/* Воронка + квота */}
       <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader>
@@ -90,10 +117,12 @@ export default function Dashboard() {
               {FUNNEL_ORDER.map((s) => (
                 <div
                   key={s}
-                  className="flex items-center gap-2 rounded-md border border-border px-3 py-2"
+                  className="flex items-center gap-2 rounded-chip bg-fitsiz-black/40 border border-fitsiz-border px-3 py-2"
                 >
-                  <Badge variant={s}>{s}</Badge>
-                  <span className="text-sm font-medium">{counts[s] || 0}</span>
+                  <Badge variant={s}>{s.replace('_', ' ')}</Badge>
+                  <span className="font-heading text-base text-fitsiz-white">
+                    {counts[s] || 0}
+                  </span>
                 </div>
               ))}
             </div>
@@ -107,18 +136,20 @@ export default function Dashboard() {
           <CardBody>
             {quota ? (
               <div>
-                <div className="text-3xl font-semibold">
-                  {quota.sent_today}{' '}
-                  <span className="text-base font-normal text-muted-foreground">
+                <div className="flex items-baseline gap-2">
+                  <div className="font-heading text-5xl leading-none text-fitsiz-green">
+                    {quota.sent_today}
+                  </div>
+                  <div className="font-heading text-xl text-fitsiz-muted">
                     / {quota.daily_limit}
-                  </span>
+                  </div>
                 </div>
-                <div className="mt-1 text-xs text-muted-foreground">
-                  Осталось: {quota.remaining}
+                <div className="mt-2 text-xs uppercase tracking-badge text-fitsiz-muted">
+                  Осталось: <span className="text-fitsiz-white font-bold">{quota.remaining}</span>
                 </div>
-                <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-muted">
+                <div className="mt-4 h-1.5 w-full overflow-hidden rounded-pill bg-fitsiz-surface-2">
                   <div
-                    className="h-full bg-primary"
+                    className="h-full bg-fitsiz-green transition-all duration-300"
                     style={{
                       width: `${
                         quota.daily_limit
@@ -130,37 +161,41 @@ export default function Dashboard() {
                 </div>
               </div>
             ) : (
-              <div className="text-sm text-muted-foreground">загрузка…</div>
+              <div className="text-sm text-fitsiz-muted">загрузка…</div>
             )}
           </CardBody>
         </Card>
       </div>
 
+      {/* Черновики */}
       <Card className="mt-6">
         <CardHeader>
-          <CardTitle>Переписки с черновиками</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <MessageSquareWarning size={14} className="text-fitsiz-lime" />
+            Переписки с черновиками
+          </CardTitle>
         </CardHeader>
         <CardBody>
           {withDrafts.length === 0 ? (
-            <div className="text-sm text-muted-foreground">
-              Черновиков сейчас нет. Создайте cold-письмо через{' '}
-              <Link to="/leads" className="text-primary underline">
-                раздел лидов
+            <div className="text-sm text-fitsiz-muted">
+              Черновиков сейчас нет. Создайте cold-письмо из{' '}
+              <Link to="/leads" className="text-fitsiz-green hover:underline">
+                раздела лидов
               </Link>
               .
             </div>
           ) : (
-            <ul className="divide-y divide-border">
+            <ul className="divide-y divide-fitsiz-border">
               {withDrafts.map((c) => (
-                <li key={c.lead_id} className="flex items-center justify-between py-2">
+                <li key={c.lead_id} className="flex items-center justify-between py-3">
                   <div className="min-w-0">
                     <Link
                       to={`/conversations/${c.lead_id}`}
-                      className="block truncate text-sm font-medium hover:underline"
+                      className="block truncate text-sm font-semibold text-fitsiz-white hover:text-fitsiz-green transition-colors"
                     >
                       {c.lead_company}
                     </Link>
-                    <div className="truncate text-xs text-muted-foreground">
+                    <div className="truncate text-xs text-fitsiz-muted">
                       {c.lead_email}
                     </div>
                   </div>

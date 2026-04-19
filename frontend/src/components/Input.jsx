@@ -1,14 +1,18 @@
 import { cn } from '../lib/cn.js'
 
+// FITSIZ inputs — dark surface, зелёная фокусная окантовка.
+
+const baseField =
+  'w-full bg-fitsiz-surface-1 text-fitsiz-white placeholder:text-fitsiz-muted ' +
+  'border border-fitsiz-border rounded-chip transition-colors ' +
+  'focus-visible:outline-none focus-visible:border-fitsiz-green ' +
+  'focus-visible:ring-1 focus-visible:ring-fitsiz-green ' +
+  'disabled:opacity-50 disabled:cursor-not-allowed'
+
 export function Input({ className, ...props }) {
   return (
     <input
-      className={cn(
-        'h-9 w-full rounded-md border border-border bg-background px-3 py-1 text-sm',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
-        'disabled:opacity-50',
-        className,
-      )}
+      className={cn(baseField, 'h-10 px-4 py-1 text-sm', className)}
       {...props}
     />
   )
@@ -17,12 +21,7 @@ export function Input({ className, ...props }) {
 export function Textarea({ className, ...props }) {
   return (
     <textarea
-      className={cn(
-        'w-full rounded-md border border-border bg-background px-3 py-2 text-sm',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
-        'disabled:opacity-50',
-        className,
-      )}
+      className={cn(baseField, 'px-4 py-3 text-sm leading-relaxed', className)}
       {...props}
     />
   )
@@ -31,11 +30,7 @@ export function Textarea({ className, ...props }) {
 export function Select({ className, children, ...props }) {
   return (
     <select
-      className={cn(
-        'h-9 w-full rounded-md border border-border bg-background px-3 py-1 text-sm',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
-        className,
-      )}
+      className={cn(baseField, 'h-10 px-4 py-1 text-sm', className)}
       {...props}
     >
       {children}

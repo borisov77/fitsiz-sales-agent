@@ -11,6 +11,8 @@ import {
   UserRound,
   Clock,
   Brain,
+  ArrowDownLeft,
+  ArrowUpRight,
 } from 'lucide-react'
 import { api } from '../lib/api.js'
 import { Card, CardBody, CardHeader, CardTitle } from '../components/Card.jsx'
@@ -18,7 +20,7 @@ import { Button } from '../components/Button.jsx'
 import { Input, Textarea } from '../components/Input.jsx'
 import { Badge } from '../components/Badge.jsx'
 
-function Message({ m, onEdit, onApprove, onSend, onDelete }) {
+function MessageBubble({ m, onEdit, onApprove, onSend, onDelete }) {
   const [editing, setEditing] = useState(false)
   const [subject, setSubject] = useState(m.subject || '')
   const [body, setBody] = useState(m.body_text || '')
@@ -41,33 +43,43 @@ function Message({ m, onEdit, onApprove, onSend, onDelete }) {
   return (
     <div
       className={
-        'rounded-lg border p-3 ' +
+        'rounded-card border p-5 ' +
         (isOut
-          ? 'border-border bg-white'
-          : 'border-cyan-200 bg-cyan-50/40')
+          ? 'border-fitsiz-border bg-fitsiz-surface-1'
+          : 'border-fitsiz-lime/30 bg-fitsiz-lime/5')
       }
     >
-      <div className="mb-1 flex items-center gap-2 text-xs text-muted-foreground">
-        <span className="font-medium">
-          {isOut ? 'FITSIZ → клиент' : 'Клиент → FITSIZ'}
-        </span>
+      <div className="mb-3 flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-badge text-fitsiz-muted">
+        {isOut ? (
+          <>
+            <ArrowUpRight size={12} className="text-fitsiz-green" />
+            <span className="font-bold text-fitsiz-white">FITSIZ → клиент</span>
+          </>
+        ) : (
+          <>
+            <ArrowDownLeft size={12} className="text-fitsiz-lime" />
+            <span className="font-bold text-fitsiz-white">Клиент → FITSIZ</span>
+          </>
+        )}
         <Badge variant={m.status}>{m.status}</Badge>
-        <Clock size={12} />
-        <span>
+        <Clock size={11} />
+        <span className="normal-case tracking-normal">
           {new Date(m.sent_at || m.created_at).toLocaleString('ru-RU')}
         </span>
         {m.ai_prompt_used && (
-          <span className="ml-auto flex items-center gap-1">
-            <Brain size={12} />
-            <span className="font-mono">{m.ai_prompt_used}</span>
+          <span className="ml-auto flex items-center gap-1 normal-case tracking-normal">
+            <Brain size={11} className="text-fitsiz-green" />
+            <span className="font-mono text-[10px] text-fitsiz-muted">
+              {m.ai_prompt_used}
+            </span>
           </span>
         )}
       </div>
       {editing ? (
-        <div className="space-y-2">
+        <div className="space-y-3">
           <Input value={subject} onChange={(e) => setSubject(e.target.value)} />
           <Textarea
-            rows={8}
+            rows={10}
             value={body}
             onChange={(e) => setBody(e.target.value)}
           />
@@ -76,22 +88,26 @@ function Message({ m, onEdit, onApprove, onSend, onDelete }) {
               Отмена
             </Button>
             <Button size="sm" onClick={save} disabled={busy === 'save'}>
-              {busy === 'save' ? 'Сохранение…' : 'Сохранить'}
+              {busy === 'save' ? 'Сохраняю…' : 'Сохранить'}
             </Button>
           </div>
         </div>
       ) : (
         <>
           {m.subject && (
-            <div className="mb-1 text-sm font-semibold">{m.subject}</div>
+            <div className="mb-2 font-body text-sm font-bold text-fitsiz-white">
+              {m.subject}
+            </div>
           )}
-          <div className="whitespace-pre-wrap text-sm">{m.body_text}</div>
+          <div className="whitespace-pre-wrap text-sm leading-relaxed text-fitsiz-muted-light">
+            {m.body_text}
+          </div>
           {m.attachments?.length ? (
-            <div className="mt-2 flex flex-wrap gap-1">
+            <div className="mt-3 flex flex-wrap gap-1.5">
               {m.attachments.map((a) => (
                 <span
                   key={a}
-                  className="rounded bg-muted px-2 py-0.5 text-[11px] text-muted-foreground"
+                  className="rounded-pill bg-fitsiz-surface-2 px-3 py-1 font-mono text-[11px] text-fitsiz-muted-light"
                 >
                   📎 {a}
                 </span>
@@ -102,37 +118,29 @@ function Message({ m, onEdit, onApprove, onSend, onDelete }) {
       )}
 
       {isOut && (isDraft || isQueued) && !editing && (
-        <div className="mt-3 flex flex-wrap justify-end gap-2">
+        <div className="mt-4 flex flex-wrap justify-end gap-2">
           {isDraft && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setEditing(true)}
-            >
-              <Pencil size={12} /> Править
+            <Button variant="outline" size="xs" onClick={() => setEditing(true)}>
+              <Pencil size={11} /> Править
             </Button>
           )}
           {isDraft && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onApprove(m.id)}
-            >
-              <Check size={12} /> Одобрить (в очередь)
+            <Button variant="outline" size="xs" onClick={() => onApprove(m.id)}>
+              <Check size={11} /> В очередь
             </Button>
           )}
-          <Button size="sm" onClick={() => onSend(m.id)}>
-            <Send size={12} /> Отправить сейчас
+          <Button variant="primary" size="xs" onClick={() => onSend(m.id)}>
+            <Send size={11} /> Отправить
           </Button>
           <Button
-            variant="ghost"
-            size="sm"
+            variant="outline"
+            size="xs"
             onClick={() => {
               if (confirm('Удалить черновик?')) onDelete(m.id)
             }}
-            className="text-red-600"
+            className="!ring-red-500/40 hover:!bg-red-900/20 text-red-400"
           >
-            <Trash2 size={12} />
+            <Trash2 size={11} />
           </Button>
         </div>
       )}
@@ -161,67 +169,44 @@ export default function ConversationDetail() {
     load()
   }, [load])
 
-  const draftCold = async () => {
-    setBusy('cold')
+  const runBusy = async (key, fn) => {
+    setBusy(key)
     try {
+      await fn()
+    } catch (e) {
+      alert(e.message)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const draftCold = () =>
+    runBusy('cold', async () => {
       await api.draftCold(leadId)
       await load()
-    } catch (e) {
-      alert(e.message)
-    } finally {
-      setBusy(null)
-    }
-  }
-
-  const draftReply = async () => {
-    setBusy('reply')
-    try {
+    })
+  const draftReply = () =>
+    runBusy('reply', async () => {
       await api.draftReply(leadId)
       await load()
-    } catch (e) {
-      alert(e.message)
-    } finally {
-      setBusy(null)
-    }
-  }
-
-  const draftFollowUp = async (stage) => {
-    setBusy(`fu:${stage}`)
-    try {
+    })
+  const draftFollowUp = (stage) =>
+    runBusy(`fu:${stage}`, async () => {
       await api.draftFollowUp(leadId, stage)
       await load()
-    } catch (e) {
-      alert(e.message)
-    } finally {
-      setBusy(null)
-    }
-  }
-
-  const qualify = async () => {
-    setBusy('qualify')
-    setQualifier(null)
-    try {
+    })
+  const qualify = () =>
+    runBusy('qualify', async () => {
+      setQualifier(null)
       const r = await api.qualify(leadId)
       setQualifier(r)
-    } catch (e) {
-      alert(e.message)
-    } finally {
-      setBusy(null)
-    }
-  }
-
-  const transfer = async () => {
-    if (!confirm('Передать лида менеджеру?')) return
-    setBusy('transfer')
-    try {
+    })
+  const transfer = () =>
+    runBusy('transfer', async () => {
+      if (!confirm('Передать лида менеджеру?')) return
       await api.conversationTransfer(leadId)
       await load()
-    } catch (e) {
-      alert(e.message)
-    } finally {
-      setBusy(null)
-    }
-  }
+    })
 
   const onEdit = async (id, payload) => {
     await api.messageEdit(id, payload)
@@ -245,81 +230,122 @@ export default function ConversationDetail() {
     await load()
   }
 
-  if (!data && !err) return <div className="p-6 text-sm text-muted-foreground">загрузка…</div>
-  if (err) return <div className="p-6 text-sm text-red-700">Ошибка: {err}</div>
+  if (!data && !err)
+    return <div className="p-8 text-sm text-fitsiz-muted">загрузка…</div>
+  if (err)
+    return (
+      <div className="p-8 text-sm text-red-400">Ошибка: {err}</div>
+    )
 
   const hasIncoming = data.messages.some((m) => m.direction === 'incoming')
 
   return (
-    <div className="p-6">
-      <div className="mb-4 flex items-center gap-2">
-        <Link to="/conversations" className="text-muted-foreground hover:text-foreground">
+    <div className="p-8">
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <Link
+          to="/conversations"
+          className="text-fitsiz-muted hover:text-fitsiz-white transition-colors"
+        >
           <ArrowLeft size={18} />
         </Link>
-        <h1 className="mr-auto text-lg font-semibold">{data.lead_company}</h1>
+        <h1 className="mr-auto font-heading text-2xl">{data.lead_company}</h1>
         <Button variant="outline" size="sm" onClick={load}>
-          <RefreshCcw size={14} />
-        </Button>
-        <Button variant="outline" size="sm" onClick={transfer} disabled={busy === 'transfer'}>
-          <UserRound size={14} /> Менеджеру
-        </Button>
-      </div>
-
-      <div className="mb-4 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-        <Badge variant={data.lead_status}>{data.lead_status}</Badge>
-        <span>{data.lead_email}</span>
-      </div>
-
-      <div className="mb-4 flex flex-wrap gap-2">
-        <Button size="sm" onClick={draftCold} disabled={busy === 'cold'}>
-          <Sparkles size={14} /> {busy === 'cold' ? 'Генерация…' : 'Cold-письмо'}
+          <RefreshCcw size={12} />
         </Button>
         <Button
+          variant="primary"
           size="sm"
+          onClick={transfer}
+          disabled={busy === 'transfer'}
+        >
+          <UserRound size={12} /> Менеджеру
+        </Button>
+      </div>
+
+      <div className="mb-6 flex flex-wrap items-center gap-3">
+        <Badge variant={data.lead_status}>{data.lead_status}</Badge>
+        <span className="text-sm text-fitsiz-muted">{data.lead_email}</span>
+      </div>
+
+      {/* AI-тулбар */}
+      <div className="mb-5 flex flex-wrap gap-2">
+        <Button variant="primary" size="sm" onClick={draftCold} disabled={busy === 'cold'}>
+          <Sparkles size={12} /> {busy === 'cold' ? 'Создаю…' : 'Cold-письмо'}
+        </Button>
+        <Button
           variant="outline"
+          size="sm"
           onClick={draftReply}
           disabled={!hasIncoming || busy === 'reply'}
           title={hasIncoming ? '' : 'Нет входящих от клиента'}
         >
-          <Sparkles size={14} /> {busy === 'reply' ? 'Ответ…' : 'Ответить AI'}
+          <Sparkles size={12} /> {busy === 'reply' ? 'Ответ…' : 'Ответить AI'}
         </Button>
         {['follow_up_1', 'follow_up_2', 'follow_up_3'].map((s) => (
           <Button
             key={s}
-            size="sm"
             variant="outline"
+            size="sm"
             onClick={() => draftFollowUp(s)}
             disabled={busy === `fu:${s}`}
           >
-            <Sparkles size={14} /> {busy === `fu:${s}` ? '…' : s.replace('_', ' ')}
+            <Sparkles size={12} />{' '}
+            {busy === `fu:${s}` ? '…' : s.replace('_', ' ')}
           </Button>
         ))}
-        <Button size="sm" variant="outline" onClick={qualify} disabled={busy === 'qualify'}>
-          <Brain size={14} /> {busy === 'qualify' ? 'Оценка…' : 'Квалифицировать'}
+        <Button variant="outline" size="sm" onClick={qualify} disabled={busy === 'qualify'}>
+          <Brain size={12} /> {busy === 'qualify' ? 'Оценка…' : 'Квалифицировать'}
         </Button>
       </div>
 
       {qualifier && (
-        <Card className="mb-4">
-          <CardHeader>
-            <CardTitle>Оценка лида</CardTitle>
-          </CardHeader>
-          <CardBody className="space-y-1 text-sm">
-            <div>
-              Интерес: <b>{qualifier.interest_score}/10</b>, готовность к
-              покупке: <b>{qualifier.buying_readiness}/10</b>, объём:{' '}
-              <b>{qualifier.estimated_volume}</b>
+        <Card variant="accent" className="mb-6">
+          <CardBody>
+            <div className="font-body text-[11px] font-bold uppercase tracking-badge text-fitsiz-black/70">
+              Оценка AI
             </div>
-            <div>
-              Следующий шаг:{' '}
-              <span className="text-muted-foreground">{qualifier.next_action}</span>
+            <div className="mt-2 flex flex-wrap gap-6">
+              <div>
+                <div className="font-heading text-3xl leading-none">
+                  {qualifier.interest_score}
+                  <span className="font-body text-lg text-fitsiz-black/60">
+                    /10
+                  </span>
+                </div>
+                <div className="mt-1 text-[10px] uppercase tracking-badge text-fitsiz-black/70">
+                  Интерес
+                </div>
+              </div>
+              <div>
+                <div className="font-heading text-3xl leading-none">
+                  {qualifier.buying_readiness}
+                  <span className="font-body text-lg text-fitsiz-black/60">
+                    /10
+                  </span>
+                </div>
+                <div className="mt-1 text-[10px] uppercase tracking-badge text-fitsiz-black/70">
+                  Готовность
+                </div>
+              </div>
+              <div>
+                <div className="font-heading text-2xl leading-none">
+                  {qualifier.estimated_volume}
+                </div>
+                <div className="mt-1 text-[10px] uppercase tracking-badge text-fitsiz-black/70">
+                  Объём
+                </div>
+              </div>
             </div>
-            <div className="text-xs text-muted-foreground">
+            <div className="mt-3 text-sm">
+              <span className="font-bold">Следующий шаг:</span>{' '}
+              {qualifier.next_action}
+            </div>
+            <div className="mt-1 text-xs text-fitsiz-black/70">
               {qualifier.reasoning}
             </div>
             {qualifier.transfer_to_manager && (
-              <div className="mt-2 rounded bg-amber-50 p-2 text-amber-800">
-                AI рекомендует передать лида менеджеру.
+              <div className="mt-3 rounded-chip bg-fitsiz-black/20 px-3 py-2 text-sm font-bold">
+                ⚠ Рекомендация AI: передать лида менеджеру.
               </div>
             )}
           </CardBody>
@@ -329,13 +355,13 @@ export default function ConversationDetail() {
       <div className="space-y-3">
         {data.messages.length === 0 ? (
           <Card>
-            <CardBody className="text-sm text-muted-foreground">
+            <CardBody className="text-sm text-fitsiz-muted">
               Сообщений пока нет. Сгенерируй cold-письмо кнопкой выше.
             </CardBody>
           </Card>
         ) : (
           data.messages.map((m) => (
-            <Message
+            <MessageBubble
               key={m.id}
               m={m}
               onEdit={onEdit}

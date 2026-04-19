@@ -1,19 +1,50 @@
 /** @type {import('tailwindcss').Config} */
+// Палитра и токены — из brand-assets/colors/tailwind.config.js
+// Правила бренда: только 4 цвета, pill-кнопки, карточки 24–32px, без теней/градиентов.
 export default {
   content: ['./index.html', './src/**/*.{js,jsx}'],
   theme: {
     extend: {
       colors: {
-        border: 'hsl(240 5.9% 90%)',
-        background: 'hsl(0 0% 100%)',
-        foreground: 'hsl(240 10% 3.9%)',
-        muted: 'hsl(240 4.8% 95.9%)',
-        'muted-foreground': 'hsl(240 3.8% 46.1%)',
-        primary: 'hsl(240 5.9% 10%)',
-        'primary-foreground': 'hsl(0 0% 98%)',
+        // Бренд
+        fitsiz: {
+          black: '#121212',
+          white: '#FFFFFF',
+          green: '#42BA1A',
+          'green-hover': '#3AA817',
+          lime: '#C2D918',
+          'lime-hover': '#B3C713',
+          'surface-1': '#1A1A1A',
+          'surface-2': '#232323',
+          'surface-3': '#2C2C2C',
+          muted: '#8A8A8A',
+          'muted-light': '#B5B5B5',
+          border: '#2A2A2A',
+        },
+        // Семантические алиасы — чтобы существующий UI-код тоже работал
+        background: '#121212',
+        foreground: '#FFFFFF',
+        border: '#2A2A2A',
+        muted: '#1A1A1A',
+        'muted-foreground': '#8A8A8A',
+        primary: '#42BA1A',
+        'primary-foreground': '#121212',
       },
       fontFamily: {
-        sans: ['system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],
+        heading: ['"Russo One"', 'system-ui', 'sans-serif'],
+        body: ['"Inter"', 'system-ui', 'sans-serif'],
+        sans: ['"Inter"', 'system-ui', 'sans-serif'],
+      },
+      borderRadius: {
+        pill: '9999px',
+        card: '24px',
+        'card-lg': '32px',
+        chip: '16px',
+      },
+      letterSpacing: {
+        heading: '0.02em',
+        cta: '0.04em',
+        badge: '0.06em',
       },
     },
   },

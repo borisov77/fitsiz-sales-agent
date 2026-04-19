@@ -42,7 +42,7 @@ export function ImportModal({ open, onClose, onImported }) {
         reset()
         onClose?.()
       }}
-      title="Импорт лидов из CSV/XLSX"
+      title="Импорт лидов из CSV / XLSX"
       footer={
         <>
           <Button
@@ -54,36 +54,50 @@ export function ImportModal({ open, onClose, onImported }) {
           >
             Закрыть
           </Button>
-          <Button onClick={submit} disabled={busy}>
+          <Button variant="primary" onClick={submit} disabled={busy}>
             {busy ? 'Импорт…' : 'Импортировать'}
           </Button>
         </>
       }
     >
-      <div className="space-y-3">
-        <p className="text-sm text-muted-foreground">
-          Ожидаемые колонки: <code>company_name, contact_name, email, phone, city,
-          region, company_type, specialization, website, source, notes</code>.
-          Дубли по email пропускаются.
+      <div className="space-y-4">
+        <p className="text-sm text-fitsiz-muted-light">
+          Ожидаемые колонки:{' '}
+          <code className="rounded-chip bg-fitsiz-surface-2 px-2 py-0.5 font-mono text-[11px] text-fitsiz-lime">
+            company_name, contact_name, email, phone, city, region,
+            company_type, specialization, website, source, notes
+          </code>
+          . Дубли по email пропускаются.
         </p>
         <input
           ref={inputRef}
           type="file"
           accept=".csv,.xlsx,.xls"
-          className="block w-full text-sm"
+          className="block w-full text-sm text-fitsiz-muted-light"
         />
         {err && (
-          <div className="rounded border border-red-200 bg-red-50 p-2 text-sm text-red-700">
+          <div className="rounded-chip border border-red-500/30 bg-red-900/20 p-3 text-sm text-red-300">
             {err}
           </div>
         )}
         {result && (
-          <div className="rounded border border-emerald-200 bg-emerald-50 p-3 text-sm">
-            <div>Всего строк: <b>{result.total_rows}</b></div>
-            <div>Создано: <b>{result.created}</b></div>
-            <div>Пропущено дублей: <b>{result.skipped_duplicates}</b></div>
+          <div className="space-y-1 rounded-card border border-fitsiz-green/30 bg-fitsiz-green/10 p-4 text-sm text-fitsiz-white">
+            <div>
+              Всего строк:{' '}
+              <b className="text-fitsiz-green">{result.total_rows}</b>
+            </div>
+            <div>
+              Создано:{' '}
+              <b className="text-fitsiz-green">{result.created}</b>
+            </div>
+            <div>
+              Пропущено дублей:{' '}
+              <b className="text-fitsiz-muted-light">
+                {result.skipped_duplicates}
+              </b>
+            </div>
             {result.errors?.length ? (
-              <div className="mt-1 text-red-700">
+              <div className="mt-2 text-red-300">
                 Ошибок: {result.errors.length}
                 <ul className="mt-1 list-inside list-disc">
                   {result.errors.slice(0, 5).map((e, i) => (
