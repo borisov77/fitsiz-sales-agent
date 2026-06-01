@@ -8,6 +8,7 @@ import {
   MessageSquareWarning,
   Pencil,
   RotateCcw,
+  FileWarning,
 } from 'lucide-react'
 import { api } from '../lib/api.js'
 import { StatsCard } from '../components/StatsCard.jsx'
@@ -182,18 +183,21 @@ export default function Dashboard() {
   const [leads, setLeads] = useState([])
   const [quota, setQuota] = useState(null)
   const [conv, setConv] = useState([])
+  const [docs, setDocs] = useState(null)
   const [err, setErr] = useState(null)
 
   const loadAll = useCallback(async () => {
     try {
-      const [l, q, c] = await Promise.all([
+      const [l, q, c, d] = await Promise.all([
         api.leadsList({ limit: 1000 }),
         api.emailQuota(),
         api.conversationsList({ limit: 500 }),
+        api.emailDocuments(),
       ])
       setLeads(l || [])
       setQuota(q)
       setConv(c || [])
+      setDocs(d)
     } catch (e) {
       setErr(e.message)
     }
@@ -236,6 +240,22 @@ export default function Dashboard() {
         accent="зор"
         description="Состояние воронки, квота отправки сегодня и переписки, где агент ждёт твоего одобрения."
       />
+
+      {docs?.is_empty && (
+        <div className="mb-5 flex items-start gap-3 rounded-chip border border-amber-500/40 bg-amber-900/20 p-4 text-amber-200">
+          <FileWarning size={20} className="mt-0.5 shrink-0 text-amber-400" />
+          <div className="text-[14px]">
+            <div className="font-semibold text-amber-100">
+              Папка documents/ пуста
+            </div>
+            <div className="mt-0.5">
+              Загрузите прайс и каталог в{' '}
+              <code className="text-amber-300">documents/</code>, иначе агент не
+              сможет отправлять документы клиентам.
+            </div>
+          </div>
+        </div>
+      )}
 
       {err && (
         <div className="mb-5 rounded-chip border border-red-500/30 bg-red-900/20 p-4 text-[14px] text-red-300">

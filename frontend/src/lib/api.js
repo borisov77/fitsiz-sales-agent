@@ -94,4 +94,5 @@ export const api = {
     }),
   emailResetLimit: () =>
     request('/api/email/limits/reset', { method: 'POST' }),
+  emailDocuments: () => request('/api/email/documents'),
 }
