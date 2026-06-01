@@ -58,6 +58,7 @@ def init_db() -> None:
         document,
         lead,
         message,
+        user,
     )
 
     Base.metadata.create_all(bind=engine)

@@ -84,6 +84,13 @@ class Settings(BaseSettings):
         default="sqlite:///./data/fitsiz_agent.db", alias="DATABASE_URL"
     )
 
+    # --- Auth (вход в дашборд) ---
+    jwt_secret: str = Field(default="dev-insecure-change-me", alias="JWT_SECRET")
+    jwt_expire_days: int = Field(default=7, alias="JWT_EXPIRE_DAYS")
+    auth_cookie_name: str = Field(default="fitsiz_session", alias="AUTH_COOKIE_NAME")
+    # cookie secure-флаг: в проде за HTTPS поставить true
+    auth_cookie_secure: bool = Field(default=False, alias="AUTH_COOKIE_SECURE")
+
     # --- API ---
     api_host: str = Field(default="0.0.0.0", alias="API_HOST")
     api_port: int = Field(default=8000, alias="API_PORT")

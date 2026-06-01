@@ -14,6 +14,7 @@ async function request(path, { method = 'GET', body, isFormData = false, query }
   const res = await fetch(url, {
     method,
     headers,
+    credentials: 'include', // отправляем httponly-cookie сессии
     body: isFormData ? body : body !== undefined ? JSON.stringify(body) : undefined,
   })
   if (res.status === 204) return null
@@ -29,6 +30,12 @@ async function request(path, { method = 'GET', body, isFormData = false, query }
 export const api = {
   // --- system / health
   health: () => request('/api/health'),
+
+  // --- auth
+  authMe: () => request('/api/auth/me'),
+  authLogin: (username, password) =>
+    request('/api/auth/login', { method: 'POST', body: { username, password } }),
+  authLogout: () => request('/api/auth/logout', { method: 'POST' }),
 
   // --- leads
   leadsList: (params) => request('/api/leads', { query: params }),
