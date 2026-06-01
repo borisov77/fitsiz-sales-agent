@@ -121,6 +121,9 @@ export const api = {
     request('/api/settings/auto-transfer', { method: 'PATCH', body: { enabled } }),
   settingsSetAutoSend: (enabled) =>
     request('/api/settings/auto-send', { method: 'PATCH', body: { enabled } }),
+  coldTemplateGet: () => request('/api/settings/cold-template'),
+  coldTemplateSave: (tpl) =>
+    request('/api/settings/cold-template', { method: 'PUT', body: tpl }),
 
   // --- documents (два фиксированных слота)
   documents: () => request('/api/documents'),

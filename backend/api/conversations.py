@@ -211,19 +211,26 @@ def get_conversation(
 def draft_cold(
     lead_id: str, db: Annotated[Session, Depends(get_db)]
 ) -> MessageRead:
+    """Первое письмо из шаблона (Settings), без AI. Подстановка переменных лида."""
+    from backend.services.cold_template import (
+        COLD_TEMPLATE_MARKER,
+        ColdTemplateError,
+        build_first_email,
+    )
+
     lead = _get_lead(db, lead_id)
     try:
-        draft = ai_engine.generate_cold_email(lead)
-    except ai_engine.AIEngineError as exc:
-        raise HTTPException(status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        subject, body, attachments = build_first_email(db, lead)
+    except ColdTemplateError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
     msg = _persist_draft(
         db,
         lead,
-        subject=draft.subject,
-        body_text=draft.body_text,
-        attachments=draft.attachments,
-        ai_prompt_used=draft.ai_prompt_used,
+        subject=subject,
+        body_text=body,
+        attachments=attachments,
+        ai_prompt_used=COLD_TEMPLATE_MARKER,
     )
     return MessageRead.model_validate(msg)
 
@@ -435,6 +442,7 @@ def send_now(
             attachments=msg.attachments,
             in_reply_to=anchor,
             references=refs or None,
+            append_signature=msg.ai_prompt_used != "cold_template",
         )
     except EmailSendError as exc:
         msg.status = MessageStatus.failed

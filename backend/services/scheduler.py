@@ -116,6 +116,8 @@ def send_queued_job() -> None:
                 attachments=msg.attachments,
                 in_reply_to=msg.in_reply_to,
                 references=refs or None,
+                # cold-письма из шаблона несут свою подпись — авто не добавляем
+                append_signature=msg.ai_prompt_used != "cold_template",
             )
         except EmailSendError as exc:
             log.error("[scheduler] SMTP ошибка для лида %s: %s", lead.company_name, exc)

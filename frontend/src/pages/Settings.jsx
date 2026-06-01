@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { FileKey2, Send, UserCheck, Users, Trash2, Plus, ArrowRightLeft, Rocket } from 'lucide-react'
+import { FileKey2, Send, UserCheck, Users, Trash2, Plus, ArrowRightLeft, Rocket, Mail } from 'lucide-react'
 import { Card, CardBody, CardHeader, CardTitle } from '../components/Card.jsx'
 import { Button } from '../components/Button.jsx'
 import { Input, Textarea } from '../components/Input.jsx'
@@ -180,6 +180,102 @@ function ManagerTransferCard() {
   )
 }
 
+function ColdTemplateCard() {
+  const [tpl, setTpl] = useState({ subject: '', body: '', signature: '' })
+  const [loaded, setLoaded] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState(null)
+
+  useEffect(() => {
+    api
+      .coldTemplateGet()
+      .then((t) => {
+        setTpl(t)
+        setLoaded(true)
+      })
+      .catch((e) => setMsg({ ok: false, text: e.message }))
+  }, [])
+
+  const set = (k) => (e) => setTpl((t) => ({ ...t, [k]: e.target.value }))
+
+  const save = async () => {
+    setBusy(true)
+    setMsg(null)
+    try {
+      const saved = await api.coldTemplateSave(tpl)
+      setTpl(saved)
+      setMsg({ ok: true, text: 'Шаблон сохранён' })
+    } catch (e) {
+      setMsg({ ok: false, text: e.message })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const label = 'mb-1.5 block text-[12px] uppercase tracking-badge text-fitsiz-muted'
+  const empty = loaded && (!tpl.subject.trim() || !tpl.body.trim())
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Mail size={16} className="text-fitsiz-green" />
+          Шаблон первого письма
+        </CardTitle>
+      </CardHeader>
+      <CardBody className="space-y-4">
+        <p className="text-[14px] text-fitsiz-muted-light leading-relaxed">
+          Первое (холодное) письмо НЕ генерируется AI — берётся отсюда. Доступные
+          переменные:{' '}
+          <code className="rounded-chip bg-fitsiz-surface-2 px-2 py-0.5 font-mono text-[12px] text-fitsiz-lime">
+            {'{company_name}'}
+          </code>{' '}
+          <code className="rounded-chip bg-fitsiz-surface-2 px-2 py-0.5 font-mono text-[12px] text-fitsiz-lime">
+            {'{contact_name}'}
+          </code>{' '}
+          — подставятся данными лида (если имя пустое, обращение убирается).
+          Прайс и презентация уходят вложением. AI остаётся на ответах,
+          follow-up и квалификации.
+        </p>
+
+        <div>
+          <label className={label}>Тема письма</label>
+          <Input value={tpl.subject} onChange={set('subject')} />
+        </div>
+        <div>
+          <label className={label}>Тело письма</label>
+          <Textarea rows={9} value={tpl.body} onChange={set('body')} />
+        </div>
+        <div>
+          <label className={label}>Подпись / визитка</label>
+          <Textarea rows={4} value={tpl.signature} onChange={set('signature')} />
+        </div>
+
+        {empty && (
+          <div className="rounded-chip border border-amber-500/40 bg-amber-900/20 p-3 text-[13px] text-amber-200">
+            Тема и тело не должны быть пустыми — иначе рассылку не запустить.
+          </div>
+        )}
+
+        <div className="flex items-center gap-4">
+          <Button variant="primary" size="md" onClick={save} disabled={busy}>
+            {busy ? 'Сохранение…' : 'Сохранить шаблон'}
+          </Button>
+          {msg && (
+            <span
+              className={
+                'text-[14px] ' + (msg.ok ? 'text-fitsiz-green' : 'text-red-400')
+              }
+            >
+              {msg.text}
+            </span>
+          )}
+        </div>
+      </CardBody>
+    </Card>
+  )
+}
+
 function SendModeCard() {
   const [auto, setAuto] = useState(false)
   const [err, setErr] = useState(null)
@@ -286,6 +382,8 @@ export default function SettingsPage() {
         accent="ройки"
         description="Передача менеджеру и почты — здесь, в интерфейсе. Секреты (SMTP, ключи) — в .env."
       />
+
+      <ColdTemplateCard />
 
       <SendModeCard />
 

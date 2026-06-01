@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from backend.database import get_db
 from backend.services import app_settings
+from backend.services import cold_template
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -71,3 +72,27 @@ def update_auto_send(
 ) -> SettingsRead:
     app_settings.set_auto_send(db, payload.enabled)
     return _read(db)
+
+
+# ==========================
+# Шаблон первого письма
+# ==========================
+class ColdTemplate(BaseModel):
+    subject: str
+    body: str
+    signature: str
+
+
+@router.get("/cold-template", response_model=ColdTemplate)
+def get_cold_template(db: Annotated[Session, Depends(get_db)]) -> ColdTemplate:
+    return ColdTemplate(**cold_template.get_template(db))
+
+
+@router.put("/cold-template", response_model=ColdTemplate)
+def update_cold_template(
+    payload: ColdTemplate, db: Annotated[Session, Depends(get_db)]
+) -> ColdTemplate:
+    tpl = cold_template.set_template(
+        db, payload.subject, payload.body, payload.signature
+    )
+    return ColdTemplate(**tpl)

@@ -72,11 +72,16 @@ def _build_unsubscribe_footer(lead_email: str) -> str:
     )
 
 
-def _compose_body(body_text: str, to_email: str) -> str:
-    """Склеиваем тело + подпись + футер отписки."""
-    signature = _build_signature()
+def _compose_body(body_text: str, to_email: str, *, append_signature: bool = True) -> str:
+    """Склеиваем тело + (опц.) авто-подпись + футер отписки.
+
+    Для cold-писем из шаблона подпись уже в теле — авто-подпись не добавляем.
+    """
     footer = _build_unsubscribe_footer(to_email)
-    return f"{body_text.rstrip()}\n{signature}{footer}\n"
+    if append_signature:
+        signature = _build_signature()
+        return f"{body_text.rstrip()}\n{signature}{footer}\n"
+    return f"{body_text.rstrip()}\n{footer}\n"
 
 
 def _resolve_attachment_paths(attachments: list[str] | None) -> list[Path]:
@@ -131,6 +136,7 @@ def build_message(
     attachments: list[str] | None = None,
     in_reply_to: str | None = None,
     references: list[str] | None = None,
+    append_signature: bool = True,
 ) -> EmailMessage:
     """Собирает EmailMessage целиком (без отправки). Выделено для тестов."""
     if not settings.email_address:
@@ -159,7 +165,7 @@ def build_message(
     )
     msg["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
 
-    body = _compose_body(body_text, to)
+    body = _compose_body(body_text, to, append_signature=append_signature)
     msg.set_content(body, subtype="plain", charset="utf-8")
 
     # Вложения
@@ -177,6 +183,7 @@ def send_email(
     attachments: list[str] | None = None,
     in_reply_to: str | None = None,
     references: list[str] | None = None,
+    append_signature: bool = True,
     timeout: float = 30.0,
 ) -> SendResult:
     """Отправка письма через SMTP Mail.ru (SSL).
@@ -191,6 +198,7 @@ def send_email(
         attachments=attachments,
         in_reply_to=in_reply_to,
         references=references,
+        append_signature=append_signature,
     )
 
     if not settings.email_password:

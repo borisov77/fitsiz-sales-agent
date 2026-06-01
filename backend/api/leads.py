@@ -104,8 +104,20 @@ def launch_campaign(
                       лид остаётся new до ручного одобрения и отправки.
     """
     from backend.models.message import Message, MessageDirection, MessageStatus
-    from backend.services import ai_engine
     from backend.services.app_settings import get_auto_send
+    from backend.services.cold_template import (
+        COLD_TEMPLATE_MARKER,
+        ColdTemplateError,
+        build_first_email,
+        is_filled,
+    )
+
+    # Первое письмо — из шаблона (без AI). Пустой шаблон → ошибка.
+    if not is_filled(db):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="Заполните шаблон первого письма в Настройках",
+        )
 
     auto = get_auto_send(db)
     queued = drafted = skipped = 0
@@ -120,19 +132,19 @@ def launch_campaign(
             skipped += 1
             continue
         try:
-            draft = ai_engine.generate_cold_email(lead)
-        except ai_engine.AIEngineError as exc:
+            subject, body, attachments = build_first_email(db, lead)
+        except ColdTemplateError as exc:
             errors.append(f"{lead.company_name}: {exc}")
             continue
 
         msg = Message(
             lead_id=lead.id,
             direction=MessageDirection.outgoing,
-            subject=draft.subject,
-            body_text=draft.body_text,
-            attachments=draft.attachments or None,
+            subject=subject,
+            body_text=body,
+            attachments=attachments or None,
             status=MessageStatus.queued if auto else MessageStatus.draft,
-            ai_prompt_used=draft.ai_prompt_used,
+            ai_prompt_used=COLD_TEMPLATE_MARKER,
         )
         db.add(msg)
         if auto:
