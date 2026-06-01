@@ -112,6 +112,7 @@ def _build_system_prompt() -> str:
         agent_title=settings.agent_title,
         agent_phone=settings.agent_phone,
         agent_signature=settings.agent_signature,
+        manager_name=settings.manager_name or "наш старший менеджер",
         **knowledge,
     )
 
