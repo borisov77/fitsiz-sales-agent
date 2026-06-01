@@ -121,8 +121,11 @@ def notify_manager_about_warm_lead(
     Возвращает Message.id записи в БД (для аудита) или None если не отправлено
     (нет MANAGER_EMAIL или уже отправлялось недавно).
     """
-    if not settings.manager_email:
-        log.warning("MANAGER_EMAIL не задан в .env — уведомление не отправлено")
+    from backend.services.app_settings import get_manager_emails
+
+    recipients = get_manager_emails(db)
+    if not recipients:
+        log.warning("Список почт менеджеров пуст — уведомление не отправлено")
         return None
 
     if not force and _already_notified_recently(db, lead.id):
@@ -139,11 +142,10 @@ def notify_manager_about_warm_lead(
         qualifier=qualifier,
     )
 
-    # Если есть CC — добавляем через заголовок; send_email шлёт только на один
-    # адрес, поэтому для CC нужна доработка (пока шлём только основному).
+    # Шлём одно письмо на все адреса менеджеров (в заголовке To — все).
     try:
         result = send_email(
-            to=settings.manager_email,
+            to=", ".join(recipients),
             subject=subject,
             body_text=body,
         )
@@ -168,8 +170,8 @@ def notify_manager_about_warm_lead(
     db.refresh(msg)
 
     log.info(
-        "Warm-alert отправлен менеджеру %s по лиду %s (%s)",
-        settings.manager_email,
+        "Warm-alert отправлен менеджерам %s по лиду %s (%s)",
+        ", ".join(recipients),
         lead.id,
         lead.company_name,
     )
@@ -183,8 +185,11 @@ def send_test_manager_notification(db: Session) -> str:
     """Отправляет тестовый warm-alert на MANAGER_EMAIL с фиктивным лидом.
     Возвращает Message-ID smtp-письма.
     """
-    if not settings.manager_email:
-        raise NotifierError("MANAGER_EMAIL не задан в .env")
+    from backend.services.app_settings import get_manager_emails
+
+    recipients = get_manager_emails(db)
+    if not recipients:
+        raise NotifierError("Список почт менеджеров пуст — добавьте хотя бы одну почту в Настройках")
 
     subject = "[warm][ТЕСТ] Демо-компания, Казань — тестовое уведомление"
     body = (
@@ -199,7 +204,7 @@ def send_test_manager_notification(db: Session) -> str:
 
     try:
         result = send_email(
-            to=settings.manager_email,
+            to=", ".join(recipients),
             subject=subject,
             body_text=body,
         )

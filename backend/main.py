@@ -10,6 +10,7 @@ from backend.api import conversations
 from backend.api import documents
 from backend.api import email as email_api
 from backend.api import leads
+from backend.api import settings as settings_api
 from backend.config import settings
 from backend.database import init_db
 
@@ -54,6 +55,7 @@ app.include_router(leads.router)
 app.include_router(email_api.router)
 app.include_router(conversations.router)
 app.include_router(documents.router)
+app.include_router(settings_api.router)
 
 
 if __name__ == "__main__":

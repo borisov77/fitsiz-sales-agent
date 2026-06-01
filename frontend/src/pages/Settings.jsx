@@ -1,10 +1,184 @@
-import { useState } from 'react'
-import { FileKey2, Send, UserCheck } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { FileKey2, Send, UserCheck, Users, Trash2, Plus, ArrowRightLeft } from 'lucide-react'
 import { Card, CardBody, CardHeader, CardTitle } from '../components/Card.jsx'
 import { Button } from '../components/Button.jsx'
 import { Input, Textarea } from '../components/Input.jsx'
+import { Switch } from '../components/Switch.jsx'
 import { PageHeader } from '../components/PageHeader.jsx'
 import { api } from '../lib/api.js'
+
+function isEmail(v) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim())
+}
+
+function ManagerTransferCard() {
+  const [emails, setEmails] = useState([])
+  const [maxEmails, setMaxEmails] = useState(5)
+  const [auto, setAuto] = useState(false)
+  const [newEmail, setNewEmail] = useState('')
+  const [err, setErr] = useState(null)
+  const [savedMsg, setSavedMsg] = useState(null)
+  const [busy, setBusy] = useState(false)
+
+  const load = async () => {
+    try {
+      const s = await api.settingsGet()
+      setEmails(s.manager_emails || [])
+      setMaxEmails(s.max_manager_emails || 5)
+      setAuto(!!s.auto_transfer_to_manager)
+    } catch (e) {
+      setErr(e.message)
+    }
+  }
+  useEffect(() => {
+    load()
+  }, [])
+
+  const persist = async (list) => {
+    setErr(null)
+    setSavedMsg(null)
+    setBusy(true)
+    try {
+      const s = await api.settingsSetManagerEmails(list)
+      setEmails(s.manager_emails || [])
+      setSavedMsg('Сохранено')
+    } catch (e) {
+      setErr(e.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const addEmail = async () => {
+    const v = newEmail.trim()
+    if (!isEmail(v)) return setErr('Укажите корректный email')
+    if (emails.some((e) => e.toLowerCase() === v.toLowerCase()))
+      return setErr('Такой email уже добавлен')
+    if (emails.length >= maxEmails) return setErr(`Не более ${maxEmails} адресов`)
+    setNewEmail('')
+    await persist([...emails, v])
+  }
+
+  const removeEmail = async (idx) => {
+    await persist(emails.filter((_, i) => i !== idx))
+  }
+
+  const toggleAuto = async (next) => {
+    setErr(null)
+    setAuto(next)
+    try {
+      await api.settingsSetAutoTransfer(next)
+    } catch (e) {
+      setErr(e.message)
+      setAuto(!next)
+    }
+  }
+
+  const atLimit = emails.length >= maxEmails
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <ArrowRightLeft size={16} className="text-fitsiz-green" />
+          Передача менеджеру
+        </CardTitle>
+      </CardHeader>
+      <CardBody className="space-y-6">
+        {/* Авто-передача */}
+        <div className="flex items-start justify-between gap-4">
+          <div className="max-w-md">
+            <div className="text-[15px] font-semibold text-fitsiz-white">
+              Авто-передача warm-лидов
+            </div>
+            <p className="mt-1 text-[14px] text-fitsiz-muted-light leading-relaxed">
+              Если включено — как только лид становится тёплым, уведомление
+              автоматически уходит на все почты менеджеров. Если выключено —
+              лид помечается, а письмо отправляется вручную кнопкой «Отправить
+              менеджеру».
+            </p>
+          </div>
+          <Switch checked={auto} onChange={toggleAuto} label="Авто-передача" />
+        </div>
+
+        <div className="h-px bg-fitsiz-border" />
+
+        {/* Почты менеджеров */}
+        <div>
+          <div className="mb-3 flex items-center gap-2 text-[15px] font-semibold text-fitsiz-white">
+            <Users size={15} className="text-fitsiz-green" />
+            Почты менеджеров
+            <span className="text-[12px] font-normal text-fitsiz-muted">
+              {emails.length}/{maxEmails}
+            </span>
+          </div>
+
+          {emails.length === 0 ? (
+            <div className="mb-3 rounded-chip border border-amber-500/40 bg-amber-900/20 p-3 text-[13px] text-amber-200">
+              Добавьте хотя бы одну почту менеджера — иначе уведомления о тёплых
+              лидах отправлять некуда.
+            </div>
+          ) : (
+            <ul className="mb-3 space-y-2">
+              {emails.map((e, i) => (
+                <li
+                  key={e}
+                  className="flex items-center justify-between rounded-chip border border-fitsiz-border bg-fitsiz-black/40 px-4 py-2.5"
+                >
+                  <span className="text-[14px] text-fitsiz-white">{e}</span>
+                  <button
+                    onClick={() => removeEmail(i)}
+                    disabled={busy}
+                    className="text-fitsiz-muted hover:text-red-400 transition-colors disabled:opacity-50"
+                    aria-label={`Удалить ${e}`}
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <div className="flex items-center gap-2">
+            <Input
+              type="email"
+              placeholder="manager@fitsiz.ru"
+              value={newEmail}
+              onChange={(e) => setNewEmail(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && !atLimit && addEmail()}
+              disabled={atLimit}
+              className="max-w-sm"
+            />
+            <Button
+              variant="primary"
+              size="md"
+              onClick={addEmail}
+              disabled={atLimit || busy}
+            >
+              <Plus size={14} /> Добавить почту
+            </Button>
+          </div>
+          {atLimit && (
+            <div className="mt-2 text-[12px] text-fitsiz-muted">
+              Достигнут лимит в {maxEmails} адресов — удалите лишний, чтобы
+              добавить другой.
+            </div>
+          )}
+        </div>
+
+        {(err || savedMsg) && (
+          <div
+            className={
+              'text-[14px] ' + (err ? 'text-red-400' : 'text-fitsiz-green')
+            }
+          >
+            {err || savedMsg}
+          </div>
+        )}
+      </CardBody>
+    </Card>
+  )
+}
 
 export default function SettingsPage() {
   const [to, setTo] = useState('')
@@ -56,8 +230,10 @@ export default function SettingsPage() {
         chip="конфигурация"
         title="Настройки"
         accent="ройки"
-        description="Параметры агента в .env. Здесь — только тестовая отправка, чтобы проверить, что всё работает."
+        description="Передача менеджеру и почты — здесь, в интерфейсе. Секреты (SMTP, ключи) — в .env."
       />
+
+      <ManagerTransferCard />
 
       <Card>
         <CardHeader>
@@ -68,13 +244,13 @@ export default function SettingsPage() {
         </CardHeader>
         <CardBody className="space-y-4 text-[15px] text-fitsiz-muted-light leading-relaxed">
           <p>
-            Все ключевые параметры (SMTP/IMAP, Anthropic API-ключ, имя агента,
-            лимиты, режим <code className={code}>AUTO_SEND</code>) берутся из
-            файла <code className={code}>.env</code> в корне проекта. Редактирование через UI не реализовано — это осознанный выбор: секреты лежат в файле, не в БД.
+            Секреты и инфраструктура (SMTP/IMAP, Anthropic API-ключ, имя агента,
+            лимиты, режим <code className={code}>AUTO_SEND</code>) берутся из{' '}
+            <code className={code}>.env</code> в корне проекта.
           </p>
           <p>
-            Чтобы поменять настройки — отредактируй{' '}
-            <code className={code}>.env</code> и перезапусти backend.
+            Почты менеджеров и режим авто-передачи хранятся в БД и меняются
+            прямо здесь — без перезапуска backend.
           </p>
         </CardBody>
       </Card>
@@ -98,11 +274,7 @@ export default function SettingsPage() {
             onChange={(e) => setSubject(e.target.value)}
             placeholder="Тема"
           />
-          <Textarea
-            rows={4}
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-          />
+          <Textarea rows={4} value={body} onChange={(e) => setBody(e.target.value)} />
           <div className="flex items-center gap-4 flex-wrap">
             <Button variant="primary" size="md" onClick={send} disabled={busy}>
               {busy ? 'Отправка…' : 'Отправить тест'}
@@ -110,8 +282,7 @@ export default function SettingsPage() {
             {status && (
               <span
                 className={
-                  'text-[14px] ' +
-                  (status.ok ? 'text-fitsiz-green' : 'text-red-400')
+                  'text-[14px] ' + (status.ok ? 'text-fitsiz-green' : 'text-red-400')
                 }
               >
                 {status.msg}
@@ -130,14 +301,18 @@ export default function SettingsPage() {
         </CardHeader>
         <CardBody className="space-y-4">
           <p className="text-[15px] text-fitsiz-muted-light leading-relaxed">
-            Отправляет тестовый warm-alert на адрес{' '}
-            <code className={code}>MANAGER_EMAIL</code> из{' '}
-            <code className={code}>.env</code> — с фиктивным лидом.
-            Проверяет, что менеджер получает уведомления, когда лид
-            становится тёплым.
+            Отправляет тестовый warm-alert на{' '}
+            <b className="text-fitsiz-white">все почты менеджеров</b> из списка
+            выше — с фиктивным лидом. Проверяет, что менеджеры получают
+            уведомления.
           </p>
           <div className="flex items-center gap-4 flex-wrap">
-            <Button variant="primary" size="md" onClick={sendManagerTest} disabled={mgrBusy}>
+            <Button
+              variant="primary"
+              size="md"
+              onClick={sendManagerTest}
+              disabled={mgrBusy}
+            >
               {mgrBusy ? 'Отправка…' : 'Отправить тест менеджеру'}
             </Button>
             {mgrStatus && (

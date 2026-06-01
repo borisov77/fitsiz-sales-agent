@@ -6,6 +6,8 @@
 """
 from __future__ import annotations
 
+import json
+import re
 from datetime import datetime
 
 from sqlalchemy.orm import Session
@@ -16,6 +18,11 @@ from backend.models.app_setting import AppSetting
 
 # Ключи
 KEY_DAILY_LIMIT = "max_cold_emails_per_day"
+KEY_MANAGER_EMAILS = "manager_emails"
+KEY_AUTO_TRANSFER = "auto_transfer_to_manager"
+
+MAX_MANAGER_EMAILS = 5
+_EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 
 
 # ==========================
@@ -73,3 +80,68 @@ def reset_daily_limit(db: Session) -> int:
 
 def has_daily_limit_override(db: Session) -> bool:
     return _get(db, KEY_DAILY_LIMIT) is not None
+
+
+# ==========================
+# Почты менеджеров (до 5, хранятся в БД)
+# ==========================
+class ManagerEmailsError(ValueError):
+    """Невалидный список почт менеджеров."""
+
+
+def _env_manager_emails() -> list[str]:
+    """Фолбэк из .env: MANAGER_EMAIL + MANAGER_EMAIL_CC."""
+    out: list[str] = []
+    if settings.manager_email:
+        out.append(settings.manager_email.strip())
+    for cc in settings.manager_cc_list:
+        if cc not in out:
+            out.append(cc)
+    return out[:MAX_MANAGER_EMAILS]
+
+
+def get_manager_emails(db: Session) -> list[str]:
+    """Текущий список почт менеджеров: override из БД или фолбэк из .env."""
+    raw = _get(db, KEY_MANAGER_EMAILS)
+    if raw is None:
+        return _env_manager_emails()
+    try:
+        data = json.loads(raw)
+        if isinstance(data, list):
+            return [str(e).strip() for e in data if str(e).strip()][:MAX_MANAGER_EMAILS]
+    except json.JSONDecodeError:
+        pass
+    return _env_manager_emails()
+
+
+def set_manager_emails(db: Session, emails: list[str]) -> list[str]:
+    """Валидирует и сохраняет список почт. Дубли убираем, максимум 5."""
+    cleaned: list[str] = []
+    for e in emails:
+        addr = (e or "").strip()
+        if not addr:
+            continue
+        if not _EMAIL_RE.match(addr):
+            raise ManagerEmailsError(f"Некорректный email: {addr}")
+        if addr.lower() not in {x.lower() for x in cleaned}:
+            cleaned.append(addr)
+    if len(cleaned) > MAX_MANAGER_EMAILS:
+        raise ManagerEmailsError(f"Не более {MAX_MANAGER_EMAILS} адресов")
+    _set(db, KEY_MANAGER_EMAILS, json.dumps(cleaned, ensure_ascii=False))
+    return cleaned
+
+
+# ==========================
+# Авто-передача менеджеру (тумблер)
+# ==========================
+def get_auto_transfer(db: Session) -> bool:
+    """Включена ли авто-передача warm-лида: override из БД или дефолт из .env."""
+    raw = _get(db, KEY_AUTO_TRANSFER)
+    if raw is None:
+        return settings.auto_transfer_to_manager
+    return raw == "1"
+
+
+def set_auto_transfer(db: Session, enabled: bool) -> bool:
+    _set(db, KEY_AUTO_TRANSFER, "1" if enabled else "0")
+    return enabled

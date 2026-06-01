@@ -41,6 +41,8 @@ export const api = {
   leadDelete: (id) => request(`/api/leads/${id}`, { method: 'DELETE' }),
   leadTransfer: (id, manager = 'manager') =>
     request(`/api/leads/${id}/transfer`, { method: 'POST', query: { manager } }),
+  leadNotifyManager: (id) =>
+    request(`/api/leads/${id}/notify-manager`, { method: 'POST' }),
   leadsImport: (file, campaignId) => {
     const fd = new FormData()
     fd.append('file', file)
@@ -97,6 +99,13 @@ export const api = {
     }),
   emailResetLimit: () =>
     request('/api/email/limits/reset', { method: 'POST' }),
+
+  // --- settings (рантайм, в БД)
+  settingsGet: () => request('/api/settings'),
+  settingsSetManagerEmails: (emails) =>
+    request('/api/settings/manager-emails', { method: 'PUT', body: { emails } }),
+  settingsSetAutoTransfer: (enabled) =>
+    request('/api/settings/auto-transfer', { method: 'PATCH', body: { enabled } }),
 
   // --- documents (два фиксированных слота)
   documents: () => request('/api/documents'),
