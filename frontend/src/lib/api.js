@@ -94,5 +94,18 @@ export const api = {
     }),
   emailResetLimit: () =>
     request('/api/email/limits/reset', { method: 'POST' }),
-  emailDocuments: () => request('/api/email/documents'),
+
+  // --- documents (два фиксированных слота)
+  documents: () => request('/api/documents'),
+  documentUpload: (slot, file) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return request(`/api/documents/upload/${slot}`, {
+      method: 'POST',
+      body: fd,
+      isFormData: true,
+    })
+  },
+  documentDelete: (slot) =>
+    request(`/api/documents/${slot}`, { method: 'DELETE' }),
 }

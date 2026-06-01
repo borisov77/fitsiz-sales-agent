@@ -1,0 +1,16 @@
+[
+  {
+    "filename": "pricelist_fitsiz_2026.xlsx",
+    "type": "pricelist",
+    "title": "Оптовый прайс-лист FITSIZ",
+    "send_when": "клиент спрашивает про цены, опт, скидки, стоимость, условия закупки",
+    "uploaded_at": "2026-06-01T13:22:43.952690"
+  },
+  {
+    "filename": "presentation_fitsiz.pdf",
+    "type": "presentation",
+    "title": "Презентация FITSIZ",
+    "send_when": "клиент хочет узнать о компании, продукции, ассортименте, первое знакомство",
+    "uploaded_at": "2026-06-01T13:22:43.973967"
+  }
+]

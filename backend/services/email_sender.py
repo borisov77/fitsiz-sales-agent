@@ -95,13 +95,27 @@ def _resolve_attachment_paths(attachments: list[str] | None) -> list[Path]:
     return resolved
 
 
+# Явная карта MIME для документов агента — почтовые клиенты показывают
+# правильную иконку и открывают файл нужным приложением.
+_MIME_BY_EXT: dict[str, tuple[str, str]] = {
+    ".pdf": ("application", "pdf"),
+    ".xlsx": (
+        "application",
+        "vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ),
+    ".xls": ("application", "vnd.ms-excel"),
+}
+
+
 def _attach_file(msg: EmailMessage, path: Path) -> None:
     data = path.read_bytes()
-    # Универсальный MIME — почтовые клиенты нормально парсят
+    maintype, subtype = _MIME_BY_EXT.get(
+        path.suffix.lower(), ("application", "octet-stream")
+    )
     msg.add_attachment(
         data,
-        maintype="application",
-        subtype="octet-stream",
+        maintype=maintype,
+        subtype=subtype,
         filename=path.name,
     )
 

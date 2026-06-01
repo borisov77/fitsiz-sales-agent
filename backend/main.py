@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.api import conversations
+from backend.api import documents
 from backend.api import email as email_api
 from backend.api import leads
 from backend.config import settings
@@ -52,6 +53,7 @@ def health() -> dict[str, str]:
 app.include_router(leads.router)
 app.include_router(email_api.router)
 app.include_router(conversations.router)
+app.include_router(documents.router)
 
 
 if __name__ == "__main__":

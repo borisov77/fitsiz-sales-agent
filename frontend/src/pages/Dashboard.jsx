@@ -192,7 +192,7 @@ export default function Dashboard() {
         api.leadsList({ limit: 1000 }),
         api.emailQuota(),
         api.conversationsList({ limit: 500 }),
-        api.emailDocuments(),
+        api.documents(),
       ])
       setLeads(l || [])
       setQuota(q)
@@ -241,17 +241,23 @@ export default function Dashboard() {
         description="Состояние воронки, квота отправки сегодня и переписки, где агент ждёт твоего одобрения."
       />
 
-      {docs?.is_empty && (
+      {docs?.any_empty && (
         <div className="mb-5 flex items-start gap-3 rounded-chip border border-amber-500/40 bg-amber-900/20 p-4 text-amber-200">
           <FileWarning size={20} className="mt-0.5 shrink-0 text-amber-400" />
           <div className="text-[14px]">
             <div className="font-semibold text-amber-100">
-              Папка documents/ пуста
+              Документы загружены не полностью
             </div>
             <div className="mt-0.5">
-              Загрузите прайс и каталог в{' '}
-              <code className="text-amber-300">documents/</code>, иначе агент не
-              сможет отправлять документы клиентам.
+              Загрузите прайс-лист и презентацию, чтобы агент мог отправлять
+              документы клиентам.{' '}
+              <Link
+                to="/documents"
+                className="font-semibold text-amber-300 hover:underline"
+              >
+                Перейти к документам
+              </Link>
+              .
             </div>
           </div>
         </div>

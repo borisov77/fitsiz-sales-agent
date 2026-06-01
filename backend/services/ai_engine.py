@@ -35,31 +35,20 @@ log = logging.getLogger(__name__)
 
 PROMPTS_DIR = BASE_DIR / "backend" / "prompts"
 KNOWLEDGE_DIR = BASE_DIR / "backend" / "knowledge"
-DOCUMENTS_DIR = BASE_DIR / "documents"
-
-# Типы файлов, которые имеет смысл прикладывать к письму
-_ATTACHMENT_EXTENSIONS = {
-    ".pdf", ".xlsx", ".xls", ".docx", ".doc", ".jpg", ".jpeg", ".png",
-}
 
 
 def allowed_attachments() -> set[str]:
-    """Фактические файлы из `documents/`, которые агент может приложить.
+    """Имена файлов, которые агент может приложить.
 
-    Сканируется на каждом вызове — только что загруженный файл подхватывается
-    без перезапуска. Источник истины — реальная папка, а не статический список:
-    если файла нет на диске, агент не сможет его предложить (имя отфильтруется
-    в `_filter_attachments`). Скрытые файлы (`.DS_Store`, `.gitkeep`) игнорим.
+    Источник истины — манифест `documents/documents.json` (два фиксированных
+    документа: прайс-лист и презентация), но только те записи, чей файл РЕАЛЬНО
+    лежит на диске. Если файла нет — агент его не предложит. Сверка идёт на
+    каждом вызове, так что свежезагруженный через UI файл подхватывается без
+    перезапуска.
     """
-    if not DOCUMENTS_DIR.is_dir():
-        return set()
-    return {
-        p.name
-        for p in DOCUMENTS_DIR.iterdir()
-        if p.is_file()
-        and not p.name.startswith(".")
-        and p.suffix.lower() in _ATTACHMENT_EXTENSIONS
-    }
+    from backend.services.document_store import available_attachments
+
+    return available_attachments()
 
 
 class AIEngineError(RuntimeError):

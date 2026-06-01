@@ -58,24 +58,6 @@ class FetchInboxResponse(BaseModel):
     updated_lead_ids: list[str]
 
 
-class DocumentsResponse(BaseModel):
-    files: list[str]      # фактические имена файлов из documents/
-    count: int
-    is_empty: bool        # True = агент не сможет прикладывать документы
-
-
-# ==========================
-# Статус папки documents/
-# ==========================
-@router.get("/documents", response_model=DocumentsResponse)
-def list_documents() -> DocumentsResponse:
-    """Какие файлы реально лежат в documents/ и доступны агенту для отправки."""
-    from backend.services.ai_engine import allowed_attachments
-
-    files = sorted(allowed_attachments())
-    return DocumentsResponse(files=files, count=len(files), is_empty=not files)
-
-
 # ==========================
 # Отправка тестового письма
 # ==========================

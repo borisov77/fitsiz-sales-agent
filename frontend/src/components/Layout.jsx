@@ -1,11 +1,18 @@
 import { NavLink, Outlet } from 'react-router-dom'
-import { LayoutDashboard, Users, MessagesSquare, Settings } from 'lucide-react'
+import {
+  LayoutDashboard,
+  Users,
+  MessagesSquare,
+  FileText,
+  Settings,
+} from 'lucide-react'
 import { cn } from '../lib/cn.js'
 
 const links = [
   { to: '/', label: 'Обзор', icon: LayoutDashboard },
   { to: '/leads', label: 'Лиды', icon: Users },
   { to: '/conversations', label: 'Переписки', icon: MessagesSquare },
+  { to: '/documents', label: 'Документы', icon: FileText },
   { to: '/settings', label: 'Настройки', icon: Settings },
 ]
 
