@@ -35,16 +35,31 @@ log = logging.getLogger(__name__)
 
 PROMPTS_DIR = BASE_DIR / "backend" / "prompts"
 KNOWLEDGE_DIR = BASE_DIR / "backend" / "knowledge"
+DOCUMENTS_DIR = BASE_DIR / "documents"
 
-# Разрешённые имена вложений — агент не может выдумать новые
-ALLOWED_ATTACHMENTS = {
-    "pricelist_2026.pdf",
-    "catalog_fitsiz_2026.pdf",
-    "leaflet_element_classic.pdf",
-    "leaflet_hd_ultra.pdf",
-    "commercial_offer_template.pdf",
-    "certificate_tr_ts.pdf",
+# Типы файлов, которые имеет смысл прикладывать к письму
+_ATTACHMENT_EXTENSIONS = {
+    ".pdf", ".xlsx", ".xls", ".docx", ".doc", ".jpg", ".jpeg", ".png",
 }
+
+
+def allowed_attachments() -> set[str]:
+    """Фактические файлы из `documents/`, которые агент может приложить.
+
+    Сканируется на каждом вызове — только что загруженный файл подхватывается
+    без перезапуска. Источник истины — реальная папка, а не статический список:
+    если файла нет на диске, агент не сможет его предложить (имя отфильтруется
+    в `_filter_attachments`). Скрытые файлы (`.DS_Store`, `.gitkeep`) игнорим.
+    """
+    if not DOCUMENTS_DIR.is_dir():
+        return set()
+    return {
+        p.name
+        for p in DOCUMENTS_DIR.iterdir()
+        if p.is_file()
+        and not p.name.startswith(".")
+        and p.suffix.lower() in _ATTACHMENT_EXTENSIONS
+    }
 
 
 class AIEngineError(RuntimeError):
@@ -359,7 +374,8 @@ def _format_history(messages: list[Message]) -> str:
 def _filter_attachments(names: list[str] | None) -> list[str]:
     if not names:
         return []
-    return [n for n in names if n in ALLOWED_ATTACHMENTS]
+    allowed = allowed_attachments()
+    return [n for n in names if n in allowed]
 
 
 def _sent_documents(messages: list[Message]) -> list[str]:
