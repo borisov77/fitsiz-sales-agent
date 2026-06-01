@@ -17,6 +17,7 @@ class SettingsRead(BaseModel):
     manager_emails: list[str]
     max_manager_emails: int
     auto_transfer_to_manager: bool
+    auto_send: bool
 
 
 class ManagerEmailsUpdate(BaseModel):
@@ -27,11 +28,16 @@ class AutoTransferUpdate(BaseModel):
     enabled: bool
 
 
+class AutoSendUpdate(BaseModel):
+    enabled: bool
+
+
 def _read(db: Session) -> SettingsRead:
     return SettingsRead(
         manager_emails=app_settings.get_manager_emails(db),
         max_manager_emails=app_settings.MAX_MANAGER_EMAILS,
         auto_transfer_to_manager=app_settings.get_auto_transfer(db),
+        auto_send=app_settings.get_auto_send(db),
     )
 
 
@@ -56,4 +62,12 @@ def update_auto_transfer(
     payload: AutoTransferUpdate, db: Annotated[Session, Depends(get_db)]
 ) -> SettingsRead:
     app_settings.set_auto_transfer(db, payload.enabled)
+    return _read(db)
+
+
+@router.patch("/auto-send", response_model=SettingsRead)
+def update_auto_send(
+    payload: AutoSendUpdate, db: Annotated[Session, Depends(get_db)]
+) -> SettingsRead:
+    app_settings.set_auto_send(db, payload.enabled)
     return _read(db)

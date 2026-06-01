@@ -57,11 +57,20 @@ def send_queued_job() -> None:
     значит его одобрили вручную через UI (approve), отправляем.
     """
     from backend.services.email_sender import send_email, EmailSendError
-    from backend.services.antispam import under_daily_limit
+    from backend.services.antispam import under_daily_limit, random_cold_delay_sec
+    from backend.services.app_settings import (
+        get_next_cold_send_at,
+        set_next_cold_send_at,
+    )
 
     with SessionLocal() as db:
         if not under_daily_limit(db):
             log.info("[scheduler] send_queued: дневной лимит исчерпан — пропускаем")
+            return
+
+        # Антиспам: не отправляем раньше запланированного момента (рандом 3-7 мин)
+        next_at = get_next_cold_send_at(db)
+        if next_at is not None and datetime.utcnow() < next_at:
             return
 
         # Берём самое старое queued-сообщение
@@ -121,6 +130,11 @@ def send_queued_job() -> None:
         lead.last_contact_at = result.sent_at
         if lead.status == LeadStatus.new:
             lead.status = LeadStatus.contacted
+
+        # Планируем следующую отправку через рандомные 3-7 минут (антиспам)
+        set_next_cold_send_at(
+            db, result.sent_at + timedelta(seconds=random_cold_delay_sec())
+        )
 
         db.commit()
         log.info(
@@ -213,8 +227,12 @@ def follow_up_job() -> None:
                     anchor = m.email_message_id
                     break
 
-            # Статус черновика: зависит от AUTO_SEND
-            msg_status = MessageStatus.queued if settings.auto_send else MessageStatus.draft
+            # Статус черновика: зависит от AUTO_SEND (override из БД)
+            from backend.services.app_settings import get_auto_send
+
+            msg_status = (
+                MessageStatus.queued if get_auto_send(db) else MessageStatus.draft
+            )
 
             msg = Message(
                 lead_id=lead.id,
@@ -272,8 +290,8 @@ def start_scheduler() -> None:
     scheduler.add_job(
         send_queued_job,
         "interval",
-        seconds=300,  # каждые 5 мин
-        id="send_queued",
+        seconds=60,  # проверяем очередь каждую минуту; отправку гейтит
+        id="send_queued",  # next_cold_send_at (рандом 3-7 мин между письмами)
         replace_existing=True,
         max_instances=1,
     )

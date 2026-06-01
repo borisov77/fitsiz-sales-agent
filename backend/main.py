@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from backend.api import campaign
 from backend.api import conversations
 from backend.api import documents
 from backend.api import email as email_api
@@ -56,6 +57,7 @@ app.include_router(email_api.router)
 app.include_router(conversations.router)
 app.include_router(documents.router)
 app.include_router(settings_api.router)
+app.include_router(campaign.router)
 
 
 if __name__ == "__main__":

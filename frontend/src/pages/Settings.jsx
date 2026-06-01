@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { FileKey2, Send, UserCheck, Users, Trash2, Plus, ArrowRightLeft } from 'lucide-react'
+import { FileKey2, Send, UserCheck, Users, Trash2, Plus, ArrowRightLeft, Rocket } from 'lucide-react'
 import { Card, CardBody, CardHeader, CardTitle } from '../components/Card.jsx'
 import { Button } from '../components/Button.jsx'
 import { Input, Textarea } from '../components/Input.jsx'
@@ -180,6 +180,60 @@ function ManagerTransferCard() {
   )
 }
 
+function SendModeCard() {
+  const [auto, setAuto] = useState(false)
+  const [err, setErr] = useState(null)
+
+  useEffect(() => {
+    api
+      .settingsGet()
+      .then((s) => setAuto(!!s.auto_send))
+      .catch((e) => setErr(e.message))
+  }, [])
+
+  const toggle = async (next) => {
+    setErr(null)
+    setAuto(next)
+    try {
+      await api.settingsSetAutoSend(next)
+    } catch (e) {
+      setErr(e.message)
+      setAuto(!next)
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Rocket size={16} className="text-fitsiz-green" />
+          Режим рассылки (AUTO_SEND)
+        </CardTitle>
+      </CardHeader>
+      <CardBody>
+        <div className="flex items-start justify-between gap-4">
+          <div className="max-w-xl">
+            <div className="text-[15px] font-semibold text-fitsiz-white">
+              {auto ? 'Авто-режим: письма уходят в очередь сразу' : 'Модерация: письма ждут подтверждения'}
+            </div>
+            <p className="mt-1 text-[14px] text-fitsiz-muted-light leading-relaxed">
+              <b className="text-fitsiz-white">Выключено (модерация)</b> — при
+              запуске рассылки письма генерируются как черновики, вы вручную
+              отправляете их «В очередь». Для теста.
+              <br />
+              <b className="text-fitsiz-white">Включено (авто)</b> — письма сразу
+              встают в очередь и уходят по расписанию с антиспам-задержками.
+              Для боевого режима.
+            </p>
+          </div>
+          <Switch checked={auto} onChange={toggle} label="AUTO_SEND" />
+        </div>
+        {err && <div className="mt-3 text-[14px] text-red-400">{err}</div>}
+      </CardBody>
+    </Card>
+  )
+}
+
 export default function SettingsPage() {
   const [to, setTo] = useState('')
   const [subject, setSubject] = useState('Тест FITSIZ Sales Agent')
@@ -232,6 +286,8 @@ export default function SettingsPage() {
         accent="ройки"
         description="Передача менеджеру и почты — здесь, в интерфейсе. Секреты (SMTP, ключи) — в .env."
       />
+
+      <SendModeCard />
 
       <ManagerTransferCard />
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Upload, Sparkles, ExternalLink, SendHorizonal } from 'lucide-react'
+import { Plus, Upload, Sparkles, ExternalLink, SendHorizonal, Rocket } from 'lucide-react'
 import { api } from '../lib/api.js'
 import { Card, CardBody } from '../components/Card.jsx'
 import { Button } from '../components/Button.jsx'
@@ -10,6 +10,7 @@ import { ImportModal } from '../components/ImportModal.jsx'
 import { ManualLeadModal } from '../components/ManualLeadModal.jsx'
 import { PageHeader } from '../components/PageHeader.jsx'
 import { LEAD_STATUS_RU, COMPANY_TYPE_RU } from '../lib/labels.js'
+import { cn } from '../lib/cn.js'
 
 const STATUSES = [
   '',
@@ -35,6 +36,8 @@ export default function Leads() {
   const [importOpen, setImportOpen] = useState(false)
   const [manualOpen, setManualOpen] = useState(false)
   const [busyId, setBusyId] = useState(null)
+  const [selected, setSelected] = useState(() => new Set())
+  const [launching, setLaunching] = useState(false)
 
   const load = async () => {
     setErr(null)
@@ -44,6 +47,7 @@ export default function Leads() {
         limit: 500,
       })
       setRows(list || [])
+      setSelected(new Set())
     } catch (e) {
       setErr(e.message)
     }
@@ -90,6 +94,56 @@ export default function Leads() {
     }
   }
 
+  const toggleOne = (id) =>
+    setSelected((prev) => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+
+  const allVisibleIds = filtered.map((r) => r.id)
+  const allChecked =
+    allVisibleIds.length > 0 && allVisibleIds.every((id) => selected.has(id))
+  const toggleAll = () =>
+    setSelected((prev) => {
+      if (allChecked) return new Set()
+      return new Set(allVisibleIds)
+    })
+
+  // Кнопка активна, если выбран хотя бы один new-лид
+  const selectedNewCount = filtered.filter(
+    (r) => selected.has(r.id) && r.status === 'new',
+  ).length
+
+  const launchCampaign = async () => {
+    const ids = filtered
+      .filter((r) => selected.has(r.id) && r.status === 'new')
+      .map((r) => r.id)
+    if (ids.length === 0) return
+    if (
+      !confirm(
+        `Запустить рассылку по ${ids.length} лид(ам)? Письма сгенерируются и ` +
+          `${'' /* режим решает backend */}встанут в очередь или на модерацию (по настройке AUTO_SEND).`,
+      )
+    )
+      return
+    setLaunching(true)
+    try {
+      const res = await api.launchCampaign(ids)
+      const mode = res.auto_send ? 'в очередь на отправку' : 'на модерацию (черновики)'
+      alert(
+        `Готово. Поставлено ${mode}: ${res.queued + res.drafted}. ` +
+          `Пропущено (не new): ${res.skipped}.` +
+          (res.errors?.length ? `\nОшибки: ${res.errors.length}` : ''),
+      )
+      await load()
+    } catch (e) {
+      alert(`Не получилось: ${e.message}`)
+    } finally {
+      setLaunching(false)
+    }
+  }
+
   return (
     <div className="p-10">
       <PageHeader
@@ -102,8 +156,19 @@ export default function Leads() {
             <Button variant="outline" size="md" onClick={() => setImportOpen(true)}>
               <Upload size={14} /> Импорт CSV
             </Button>
-            <Button variant="primary" size="md" onClick={() => setManualOpen(true)}>
+            <Button variant="outline" size="md" onClick={() => setManualOpen(true)}>
               <Plus size={14} /> Добавить лид вручную
+            </Button>
+            <Button
+              variant="primary"
+              size="md"
+              onClick={launchCampaign}
+              disabled={selectedNewCount === 0 || launching}
+            >
+              <Rocket size={14} />
+              {launching
+                ? 'Запуск…'
+                : `Запустить рассылку${selectedNewCount ? ` (${selectedNewCount})` : ''}`}
             </Button>
           </>
         }
@@ -146,6 +211,15 @@ export default function Leads() {
             <table className="w-full text-[14px]">
               <thead className="bg-fitsiz-black/40 text-[11px] uppercase tracking-badge text-fitsiz-muted">
                 <tr>
+                  <th className="px-5 py-4 text-left">
+                    <input
+                      type="checkbox"
+                      checked={allChecked}
+                      onChange={toggleAll}
+                      className="h-4 w-4 accent-fitsiz-green cursor-pointer"
+                      aria-label="Выбрать все"
+                    />
+                  </th>
                   <th className="px-6 py-4 text-left font-bold">Компания</th>
                   <th className="px-6 py-4 text-left font-bold">Контакт</th>
                   <th className="px-6 py-4 text-left font-bold">Email</th>
@@ -159,8 +233,20 @@ export default function Leads() {
                 {filtered.map((r) => (
                   <tr
                     key={r.id}
-                    className="border-t border-fitsiz-border hover:bg-fitsiz-black/30 transition-colors"
+                    className={cn(
+                      'border-t border-fitsiz-border hover:bg-fitsiz-black/30 transition-colors',
+                      selected.has(r.id) && 'bg-fitsiz-green/5',
+                    )}
                   >
+                    <td className="px-5 py-4">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(r.id)}
+                        onChange={() => toggleOne(r.id)}
+                        className="h-4 w-4 accent-fitsiz-green cursor-pointer"
+                        aria-label={`Выбрать ${r.company_name}`}
+                      />
+                    </td>
                     <td className="px-6 py-4 font-semibold text-fitsiz-white">
                       <Link
                         to={`/conversations/${r.id}`}
@@ -219,7 +305,7 @@ export default function Leads() {
                 {filtered.length === 0 && (
                   <tr>
                     <td
-                      colSpan={7}
+                      colSpan={8}
                       className="px-6 py-16 text-center text-[15px] text-fitsiz-muted"
                     >
                       Ничего не найдено. Импортируйте CSV с лидами.

@@ -20,6 +20,8 @@ from backend.models.app_setting import AppSetting
 KEY_DAILY_LIMIT = "max_cold_emails_per_day"
 KEY_MANAGER_EMAILS = "manager_emails"
 KEY_AUTO_TRANSFER = "auto_transfer_to_manager"
+KEY_AUTO_SEND = "auto_send"
+KEY_NEXT_COLD_SEND_AT = "next_cold_send_at"
 
 MAX_MANAGER_EMAILS = 5
 _EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
@@ -145,3 +147,36 @@ def get_auto_transfer(db: Session) -> bool:
 def set_auto_transfer(db: Session, enabled: bool) -> bool:
     _set(db, KEY_AUTO_TRANSFER, "1" if enabled else "0")
     return enabled
+
+
+# ==========================
+# Режим отправки AUTO_SEND (тумблер)
+# ==========================
+def get_auto_send(db: Session) -> bool:
+    """Авто-режим отправки: override из БД или дефолт из .env (AUTO_SEND)."""
+    raw = _get(db, KEY_AUTO_SEND)
+    if raw is None:
+        return settings.auto_send
+    return raw == "1"
+
+
+def set_auto_send(db: Session, enabled: bool) -> bool:
+    _set(db, KEY_AUTO_SEND, "1" if enabled else "0")
+    return enabled
+
+
+# ==========================
+# Тайминг очереди cold-рассылки (антиспам 3-7 мин)
+# ==========================
+def get_next_cold_send_at(db: Session) -> datetime | None:
+    raw = _get(db, KEY_NEXT_COLD_SEND_AT)
+    if not raw:
+        return None
+    try:
+        return datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+
+
+def set_next_cold_send_at(db: Session, when: datetime) -> None:
+    _set(db, KEY_NEXT_COLD_SEND_AT, when.isoformat())

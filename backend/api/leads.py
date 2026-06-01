@@ -5,6 +5,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import Response
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -75,6 +76,79 @@ def csv_template() -> Response:
         headers={
             "Content-Disposition": 'attachment; filename="leads_template.csv"'
         },
+    )
+
+
+class LaunchCampaignRequest(BaseModel):
+    lead_ids: list[str] = Field(default_factory=list)
+
+
+class LaunchCampaignResult(BaseModel):
+    requested: int
+    queued: int            # сразу в очередь (AUTO_SEND=true)
+    drafted: int           # черновики на модерацию (AUTO_SEND=false)
+    skipped: int           # не new / уже в работе
+    errors: list[str] = Field(default_factory=list)
+    auto_send: bool
+
+
+@router.post("/launch-campaign", response_model=LaunchCampaignResult)
+def launch_campaign(
+    payload: LaunchCampaignRequest, db: Annotated[Session, Depends(get_db)]
+) -> LaunchCampaignResult:
+    """Массовая генерация cold-писем для выбранных new-лидов.
+
+    AUTO_SEND=true  → письма ставятся в очередь (queued), лид → contacted,
+                      scheduler отправляет с антиспам-задержками 3-7 мин.
+    AUTO_SEND=false → письма создаются как черновики (draft) на модерацию;
+                      лид остаётся new до ручного одобрения и отправки.
+    """
+    from backend.models.message import Message, MessageDirection, MessageStatus
+    from backend.services import ai_engine
+    from backend.services.app_settings import get_auto_send
+
+    auto = get_auto_send(db)
+    queued = drafted = skipped = 0
+    errors: list[str] = []
+
+    for lead_id in payload.lead_ids:
+        lead = db.get(Lead, lead_id)
+        if lead is None:
+            errors.append(f"{lead_id}: лид не найден")
+            continue
+        if lead.status != LeadStatus.new:
+            skipped += 1
+            continue
+        try:
+            draft = ai_engine.generate_cold_email(lead)
+        except ai_engine.AIEngineError as exc:
+            errors.append(f"{lead.company_name}: {exc}")
+            continue
+
+        msg = Message(
+            lead_id=lead.id,
+            direction=MessageDirection.outgoing,
+            subject=draft.subject,
+            body_text=draft.body_text,
+            attachments=draft.attachments or None,
+            status=MessageStatus.queued if auto else MessageStatus.draft,
+            ai_prompt_used=draft.ai_prompt_used,
+        )
+        db.add(msg)
+        if auto:
+            lead.status = LeadStatus.contacted
+            queued += 1
+        else:
+            drafted += 1
+        db.commit()
+
+    return LaunchCampaignResult(
+        requested=len(payload.lead_ids),
+        queued=queued,
+        drafted=drafted,
+        skipped=skipped,
+        errors=errors,
+        auto_send=auto,
     )
 
 

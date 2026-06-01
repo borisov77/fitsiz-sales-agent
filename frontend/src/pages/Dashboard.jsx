@@ -10,8 +10,10 @@ import {
   RotateCcw,
   FileWarning,
   SendHorizonal,
+  Rocket,
 } from 'lucide-react'
 import { api } from '../lib/api.js'
+import { cn } from '../lib/cn.js'
 import { StatsCard } from '../components/StatsCard.jsx'
 import { Card, CardBody, CardHeader, CardTitle } from '../components/Card.jsx'
 import { Badge } from '../components/Badge.jsx'
@@ -185,21 +187,24 @@ export default function Dashboard() {
   const [quota, setQuota] = useState(null)
   const [conv, setConv] = useState([])
   const [docs, setDocs] = useState(null)
+  const [campaign, setCampaign] = useState(null)
   const [err, setErr] = useState(null)
   const [notifyBusy, setNotifyBusy] = useState(null)
 
   const loadAll = useCallback(async () => {
     try {
-      const [l, q, c, d] = await Promise.all([
+      const [l, q, c, d, cs] = await Promise.all([
         api.leadsList({ limit: 1000 }),
         api.emailQuota(),
         api.conversationsList({ limit: 500 }),
         api.documents(),
+        api.campaignStatus(),
       ])
       setLeads(l || [])
       setQuota(q)
       setConv(c || [])
       setDocs(d)
+      setCampaign(cs)
     } catch (e) {
       setErr(e.message)
     }
@@ -306,6 +311,49 @@ export default function Dashboard() {
           icon={ClipboardCheck}
         />
       </div>
+
+      {campaign && (
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Rocket size={16} className="text-fitsiz-green" />
+              Статус кампании
+            </CardTitle>
+          </CardHeader>
+          <CardBody>
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
+              {[
+                { label: 'В очереди', value: campaign.queued, tone: 'lime' },
+                { label: 'Отправлено сегодня', value: campaign.sent_today },
+                { label: 'Ждут ответа', value: campaign.awaiting_reply },
+                { label: 'Ответили', value: campaign.replied },
+                { label: 'Тёплые', value: campaign.warm, tone: 'green' },
+              ].map((m) => (
+                <div
+                  key={m.label}
+                  className="rounded-chip border border-fitsiz-border bg-fitsiz-black/40 px-4 py-4"
+                >
+                  <div
+                    className={cn(
+                      'font-heading text-[34px] leading-none',
+                      m.tone === 'green'
+                        ? 'text-fitsiz-green'
+                        : m.tone === 'lime'
+                          ? 'text-fitsiz-lime'
+                          : 'text-fitsiz-white',
+                    )}
+                  >
+                    {m.value}
+                  </div>
+                  <div className="mt-2 text-[11px] uppercase tracking-badge text-fitsiz-muted">
+                    {m.label}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardBody>
+        </Card>
+      )}
 
       <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-3">
         <Card className="lg:col-span-2">

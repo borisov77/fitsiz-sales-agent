@@ -43,6 +43,12 @@ export const api = {
     request(`/api/leads/${id}/transfer`, { method: 'POST', query: { manager } }),
   leadNotifyManager: (id) =>
     request(`/api/leads/${id}/notify-manager`, { method: 'POST' }),
+  launchCampaign: (leadIds) =>
+    request('/api/leads/launch-campaign', {
+      method: 'POST',
+      body: { lead_ids: leadIds },
+    }),
+  campaignStatus: () => request('/api/campaign/status'),
   leadsImport: (file, campaignId) => {
     const fd = new FormData()
     fd.append('file', file)
@@ -106,6 +112,8 @@ export const api = {
     request('/api/settings/manager-emails', { method: 'PUT', body: { emails } }),
   settingsSetAutoTransfer: (enabled) =>
     request('/api/settings/auto-transfer', { method: 'PATCH', body: { enabled } }),
+  settingsSetAutoSend: (enabled) =>
+    request('/api/settings/auto-send', { method: 'PATCH', body: { enabled } }),
 
   // --- documents (два фиксированных слота)
   documents: () => request('/api/documents'),
