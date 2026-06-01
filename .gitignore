@@ -66,3 +66,6 @@ secrets/
 
 # Claude Code local user settings (но launch.json коммитим для всех)
 .claude/settings.local.json
+
+# Локальная папка-источник с исходными файлами (не часть приложения)
+documents-sales-agent-fitsiz/
