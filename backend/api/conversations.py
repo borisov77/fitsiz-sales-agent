@@ -285,6 +285,26 @@ def draft_reply(
         ai_prompt_used=f"reply_handler:intent={draft.intent}",
         in_reply_to=anchor,
     )
+
+    # Лид стал тёплым → передача менеджеру (авто или вручную, по настройке)
+    if lead.status == LeadStatus.warm:
+        from backend.services.app_settings import get_auto_transfer
+
+        if get_auto_transfer(db):
+            from backend.services.manager_notifier import (
+                NotifierError,
+                notify_manager_about_warm_lead,
+            )
+
+            try:
+                notify_manager_about_warm_lead(
+                    db, lead, last_incoming_text=incoming.body_text
+                )
+            except NotifierError:
+                # Не валим ответ агента, если SMTP/настройки подвели — лид
+                # остаётся warm, менеджера можно отправить вручную из дашборда.
+                pass
+
     return MessageRead.model_validate(msg)
 
 

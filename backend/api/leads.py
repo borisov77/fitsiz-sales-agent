@@ -189,3 +189,50 @@ def transfer_lead(
     db.commit()
     db.refresh(lead)
     return lead
+
+
+@router.post("/{lead_id}/notify-manager")
+def notify_manager(
+    lead_id: str, db: Annotated[Session, Depends(get_db)]
+) -> dict[str, object]:
+    """Ручная отправка уведомления о лиде на все почты менеджеров."""
+    from backend.services.app_settings import get_manager_emails
+    from backend.services.manager_notifier import (
+        NotifierError,
+        notify_manager_about_warm_lead,
+    )
+
+    lead = _get_or_404(db, lead_id)
+    recipients = get_manager_emails(db)
+    if not recipients:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="Добавьте хотя бы одну почту менеджера в Настройках",
+        )
+
+    # Последнее входящее сообщение клиента — в тело уведомления
+    last_incoming = next(
+        (
+            m.body_text
+            for m in sorted(lead.messages, key=lambda x: x.created_at, reverse=True)
+            if m.direction.value == "incoming"
+        ),
+        None,
+    )
+    try:
+        message_id = notify_manager_about_warm_lead(
+            db, lead, last_incoming_text=last_incoming, force=True
+        )
+    except NotifierError as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+    # Помечаем, что лид передан
+    if lead.status == LeadStatus.warm:
+        lead.status = LeadStatus.transferred
+        db.commit()
+
+    return {
+        "status": "sent",
+        "recipients": recipients,
+        "message_id": message_id,
+    }

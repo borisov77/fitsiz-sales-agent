@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Upload, Sparkles, ExternalLink } from 'lucide-react'
+import { Plus, Upload, Sparkles, ExternalLink, SendHorizonal } from 'lucide-react'
 import { api } from '../lib/api.js'
 import { Card, CardBody } from '../components/Card.jsx'
 import { Button } from '../components/Button.jsx'
@@ -70,6 +70,19 @@ export default function Leads() {
     try {
       await api.draftCold(leadId)
       alert('Черновик создан — откройте «Переписки».')
+    } catch (e) {
+      alert(`Не получилось: ${e.message}`)
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const notifyManager = async (leadId) => {
+    setBusyId(leadId)
+    try {
+      const res = await api.leadNotifyManager(leadId)
+      alert(`Уведомление отправлено на: ${(res.recipients || []).join(', ')}`)
+      await load()
     } catch (e) {
       alert(`Не получилось: ${e.message}`)
     } finally {
@@ -173,15 +186,27 @@ export default function Leads() {
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="inline-flex gap-2">
-                        <Button
-                          variant="primary"
-                          size="xs"
-                          onClick={() => generateCold(r.id)}
-                          disabled={busyId === r.id}
-                        >
-                          <Sparkles size={12} />
-                          {busyId === r.id ? 'Создаю…' : 'Cold'}
-                        </Button>
+                        {r.status === 'warm' ? (
+                          <Button
+                            variant="primary"
+                            size="xs"
+                            onClick={() => notifyManager(r.id)}
+                            disabled={busyId === r.id}
+                          >
+                            <SendHorizonal size={12} />
+                            {busyId === r.id ? 'Отправка…' : 'Менеджеру'}
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="primary"
+                            size="xs"
+                            onClick={() => generateCold(r.id)}
+                            disabled={busyId === r.id}
+                          >
+                            <Sparkles size={12} />
+                            {busyId === r.id ? 'Создаю…' : 'Cold'}
+                          </Button>
+                        )}
                         <Link to={`/conversations/${r.id}`}>
                           <Button variant="outline" size="xs">
                             <ExternalLink size={12} /> Открыть

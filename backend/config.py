@@ -34,7 +34,7 @@ class Settings(BaseSettings):
 
     # --- AI ---
     anthropic_api_key: str = Field(default="", alias="ANTHROPIC_API_KEY")
-    ai_model: str = Field(default="claude-sonnet-4-20250514", alias="AI_MODEL")
+    ai_model: str = Field(default="claude-sonnet-4-6", alias="AI_MODEL")
 
     # --- Уведомления менеджеру (email) ---
     manager_email: str = Field(default="", alias="MANAGER_EMAIL")
@@ -74,6 +74,10 @@ class Settings(BaseSettings):
 
     # --- Режим ---
     auto_send: bool = Field(default=False, alias="AUTO_SEND")
+    # Авто-передача warm-лида менеджерам (дефолт из .env, override — в app_settings)
+    auto_transfer_to_manager: bool = Field(
+        default=False, alias="AUTO_TRANSFER_TO_MANAGER"
+    )
 
     # --- База ---
     database_url: str = Field(

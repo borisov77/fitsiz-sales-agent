@@ -9,6 +9,7 @@ import {
   Pencil,
   RotateCcw,
   FileWarning,
+  SendHorizonal,
 } from 'lucide-react'
 import { api } from '../lib/api.js'
 import { StatsCard } from '../components/StatsCard.jsx'
@@ -185,6 +186,7 @@ export default function Dashboard() {
   const [conv, setConv] = useState([])
   const [docs, setDocs] = useState(null)
   const [err, setErr] = useState(null)
+  const [notifyBusy, setNotifyBusy] = useState(null)
 
   const loadAll = useCallback(async () => {
     try {
@@ -231,6 +233,20 @@ export default function Dashboard() {
   const warmCount = counts.warm || 0
   const transferred = counts.transferred || 0
   const withDrafts = conv.filter((c) => c.has_draft)
+  const warmLeads = leads.filter((x) => x.status === 'warm')
+
+  const notifyManager = async (leadId) => {
+    setNotifyBusy(leadId)
+    try {
+      const res = await api.leadNotifyManager(leadId)
+      alert(`Уведомление отправлено на: ${(res.recipients || []).join(', ')}`)
+      await loadAll()
+    } catch (e) {
+      alert(`Не получилось: ${e.message}`)
+    } finally {
+      setNotifyBusy(null)
+    }
+  }
 
   return (
     <div className="p-10">
@@ -319,6 +335,48 @@ export default function Dashboard() {
           onReset={onResetLimit}
         />
       </div>
+
+      {warmLeads.length > 0 && (
+        <Card className="mt-6 border-fitsiz-green/30">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Flame size={16} className="text-fitsiz-green" />
+              Тёплые лиды — ждут передачи менеджеру
+            </CardTitle>
+          </CardHeader>
+          <CardBody>
+            <ul className="divide-y divide-fitsiz-border">
+              {warmLeads.map((l) => (
+                <li
+                  key={l.id}
+                  className="flex items-center justify-between gap-4 py-4"
+                >
+                  <div className="min-w-0">
+                    <Link
+                      to={`/conversations/${l.id}`}
+                      className="block truncate text-[15px] font-semibold text-fitsiz-white hover:text-fitsiz-green transition-colors"
+                    >
+                      {l.company_name}
+                    </Link>
+                    <div className="mt-0.5 truncate text-[13px] text-fitsiz-muted">
+                      {l.email}
+                    </div>
+                  </div>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => notifyManager(l.id)}
+                    disabled={notifyBusy === l.id}
+                  >
+                    <SendHorizonal size={13} />
+                    {notifyBusy === l.id ? 'Отправка…' : 'Отправить менеджеру'}
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </CardBody>
+        </Card>
+      )}
 
       <Card className="mt-6">
         <CardHeader>
