@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { Download } from 'lucide-react'
 import { Modal } from './Modal.jsx'
 import { Button } from './Button.jsx'
 import { api } from '../lib/api.js'
@@ -62,13 +63,34 @@ export function ImportModal({ open, onClose, onImported }) {
     >
       <div className="space-y-4">
         <p className="text-sm text-fitsiz-muted-light">
-          Ожидаемые колонки:{' '}
+          Единый формат — 4 колонки:{' '}
           <code className="rounded-chip bg-fitsiz-surface-2 px-2 py-0.5 font-mono text-[11px] text-fitsiz-lime">
-            company_name, contact_name, email, phone, city, region,
-            company_type, specialization, website, source, notes
+            company_name, email, description, contact_name
           </code>
-          . Дубли по email пропускаются.
+          . Обязательны <b className="text-fitsiz-white">company_name</b>,{' '}
+          <b className="text-fitsiz-white">email</b>,{' '}
+          <b className="text-fitsiz-white">description</b>;{' '}
+          <code className="font-mono text-[11px] text-fitsiz-lime">contact_name</code>{' '}
+          можно оставить пустым. Дубли по email пропускаются.
         </p>
+
+        <div className="rounded-chip border border-fitsiz-border bg-fitsiz-black/40 p-3">
+          <div className="mb-2 text-[12px] uppercase tracking-badge text-fitsiz-muted">
+            Пример строки
+          </div>
+          <code className="block whitespace-pre-wrap break-all font-mono text-[11px] text-fitsiz-muted-light">
+            ООО Сварка-Опт,zakaz@svarka-opt.ru,"Оптовый магазин сварки и СИЗ в
+            Казани, интересует расширение ассортимента масок",Иванов Сергей
+          </code>
+          <a
+            href={api.leadCsvTemplateUrl}
+            download
+            className="mt-3 inline-flex items-center gap-1.5 text-[13px] font-semibold text-fitsiz-green hover:underline"
+          >
+            <Download size={13} /> Скачать шаблон CSV
+          </a>
+        </div>
+
         <input
           ref={inputRef}
           type="file"

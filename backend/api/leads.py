@@ -4,13 +4,21 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.database import get_db
 from backend.models.lead import Lead, LeadStatus
-from backend.schemas import ImportResult, LeadCreate, LeadRead, LeadUpdate
+from backend.schemas import (
+    ImportResult,
+    LeadCreate,
+    LeadRead,
+    LeadUpdate,
+    ManualLeadCreate,
+)
 from backend.services.lead_importer import (
+    CSV_TEMPLATE,
     UnsupportedFileFormat,
     import_leads_from_bytes,
 )
@@ -53,6 +61,49 @@ def import_leads(
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST, detail=f"Failed to parse file: {exc}"
         ) from exc
+
+
+# ==========================
+# Ручное добавление + CSV-шаблон (до /{lead_id})
+# ==========================
+@router.get("/csv-template")
+def csv_template() -> Response:
+    """Отдаёт образец CSV единого формата: company_name,email,description,contact_name."""
+    return Response(
+        content=CSV_TEMPLATE,
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": 'attachment; filename="leads_template.csv"'
+        },
+    )
+
+
+@router.post("/manual", response_model=LeadRead, status_code=status.HTTP_201_CREATED)
+def create_lead_manual(
+    payload: ManualLeadCreate, db: Annotated[Session, Depends(get_db)]
+) -> Lead:
+    """Создаёт лида вручную по единому формату. Проверяет дубль по email."""
+    email = payload.email.strip().lower()
+    existing = db.execute(
+        select(Lead).where(Lead.email == email)
+    ).scalar_one_or_none()
+    if existing is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail=f"Лид с таким email уже есть: {email}",
+        )
+    lead = Lead(
+        company_name=payload.company_name.strip(),
+        email=email,
+        description=payload.description.strip(),
+        contact_name=(payload.contact_name or None),
+        source="manual",
+        status=LeadStatus.new,
+    )
+    db.add(lead)
+    db.commit()
+    db.refresh(lead)
+    return lead
 
 
 # ==========================

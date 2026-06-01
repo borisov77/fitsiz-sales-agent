@@ -58,6 +58,9 @@ class Lead(Base):
         Enum(CompanyType), default=CompanyType.other
     )
     specialization: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Свободное описание компании: чем занимается, что важно знать боту.
+    # Передаётся в контекст при генерации cold-письма.
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
     website: Mapped[str | None] = mapped_column(String(255), nullable=True)
     source: Mapped[str | None] = mapped_column(String(100), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)

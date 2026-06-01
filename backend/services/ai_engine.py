@@ -392,6 +392,7 @@ def generate_cold_email(lead: Lead) -> DraftEmail:
         region=lead.region,
         company_type=(lead.company_type.value if lead.company_type else "other"),
         specialization=lead.specialization,
+        description=lead.description,
         source=lead.source,
         notes=lead.notes,
     )

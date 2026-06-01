@@ -20,6 +20,7 @@ class LeadBase(BaseModel):
     region: str | None = Field(default=None, max_length=100)
     company_type: CompanyType = CompanyType.other
     specialization: str | None = None
+    description: str | None = None
     website: str | None = Field(default=None, max_length=255)
     source: str | None = Field(default=None, max_length=100)
     notes: str | None = None
@@ -27,6 +28,18 @@ class LeadBase(BaseModel):
 
 class LeadCreate(LeadBase):
     campaign_id: str | None = None
+
+
+class ManualLeadCreate(BaseModel):
+    """Единый формат лида для ручного добавления через UI.
+
+    Обязательные: company_name, email, description. Необязательное: contact_name.
+    """
+
+    company_name: str = Field(..., min_length=1, max_length=255)
+    email: EmailStr
+    description: str = Field(..., min_length=1)
+    contact_name: str | None = Field(default=None, max_length=255)
 
 
 class LeadUpdate(BaseModel):
@@ -38,6 +51,7 @@ class LeadUpdate(BaseModel):
     region: str | None = None
     company_type: CompanyType | None = None
     specialization: str | None = None
+    description: str | None = None
     website: str | None = None
     source: str | None = None
     notes: str | None = None

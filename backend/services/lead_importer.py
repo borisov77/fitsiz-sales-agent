@@ -16,19 +16,19 @@ from backend.models.lead import CompanyType, Lead, LeadStatus
 from backend.schemas import ImportResult
 
 
-EXPECTED_COLUMNS = {
-    "company_name",
-    "contact_name",
-    "email",
-    "phone",
-    "city",
-    "region",
-    "company_type",
-    "specialization",
-    "website",
-    "source",
-    "notes",
-}
+# Единый формат лида: обязательны company_name, email, description.
+# contact_name — необязательное (можно пустым).
+EXPECTED_COLUMNS = ["company_name", "email", "description", "contact_name"]
+
+# Образец для скачивания (GET /api/leads/csv-template).
+CSV_TEMPLATE = (
+    "company_name,email,description,contact_name\r\n"
+    'ООО Сварка-Опт,zakaz@svarka-opt.ru,'
+    '"Оптовый магазин сварочного оборудования и СИЗ, 3 точки в Казани, '
+    'интересует расширение ассортимента масок",Иванов Сергей\r\n'
+    'ТД Спецодежда,info@specodezhda.ru,'
+    '"Розничная сеть спецодежды и СИЗ, ищут недорогие маски-хамелеоны для полки",\r\n'
+)
 
 
 class UnsupportedFileFormat(ValueError):
@@ -111,8 +111,13 @@ def import_rows(
         company_val = row.get("company_name")
         company = (str(company_val).strip()) if company_val else None
 
-        if not email or not company:
-            errors.append(f"Row {idx}: missing email or company_name")
+        desc_val = row.get("description")
+        description = (str(desc_val).strip()) if desc_val else None
+
+        if not email or not company or not description:
+            errors.append(
+                f"Строка {idx}: обязательны company_name, email и description"
+            )
             continue
 
         if email in existing_emails:
@@ -124,13 +129,15 @@ def import_rows(
                 company_name=company,
                 contact_name=row.get("contact_name"),  # type: ignore[arg-type]
                 email=email,
+                description=description,
+                # Доп. поля поддерживаем, если они есть в файле (обратная совместимость)
                 phone=row.get("phone"),  # type: ignore[arg-type]
                 city=row.get("city"),  # type: ignore[arg-type]
                 region=row.get("region"),  # type: ignore[arg-type]
                 company_type=parse_company_type(row.get("company_type")),  # type: ignore[arg-type]
                 specialization=row.get("specialization"),  # type: ignore[arg-type]
                 website=row.get("website"),  # type: ignore[arg-type]
-                source=row.get("source"),  # type: ignore[arg-type]
+                source=row.get("source") or "csv_import",  # type: ignore[arg-type]
                 notes=row.get("notes"),  # type: ignore[arg-type]
                 campaign_id=campaign_id,
                 status=LeadStatus.new,

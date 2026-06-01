@@ -7,6 +7,7 @@ import { Button } from '../components/Button.jsx'
 import { Input, Select } from '../components/Input.jsx'
 import { Badge } from '../components/Badge.jsx'
 import { ImportModal } from '../components/ImportModal.jsx'
+import { ManualLeadModal } from '../components/ManualLeadModal.jsx'
 import { PageHeader } from '../components/PageHeader.jsx'
 import { LEAD_STATUS_RU, COMPANY_TYPE_RU } from '../lib/labels.js'
 
@@ -32,6 +33,7 @@ export default function Leads() {
   const [search, setSearch] = useState('')
   const [err, setErr] = useState(null)
   const [importOpen, setImportOpen] = useState(false)
+  const [manualOpen, setManualOpen] = useState(false)
   const [busyId, setBusyId] = useState(null)
 
   const load = async () => {
@@ -85,10 +87,10 @@ export default function Leads() {
         actions={
           <>
             <Button variant="outline" size="md" onClick={() => setImportOpen(true)}>
-              <Upload size={14} /> Импорт
+              <Upload size={14} /> Импорт CSV
             </Button>
-            <Button variant="primary" size="md" disabled>
-              <Plus size={14} /> Добавить
+            <Button variant="primary" size="md" onClick={() => setManualOpen(true)}>
+              <Plus size={14} /> Добавить лид вручную
             </Button>
           </>
         }
@@ -209,6 +211,11 @@ export default function Leads() {
         open={importOpen}
         onClose={() => setImportOpen(false)}
         onImported={load}
+      />
+      <ManualLeadModal
+        open={manualOpen}
+        onClose={() => setManualOpen(false)}
+        onCreated={load}
       />
     </div>
   )

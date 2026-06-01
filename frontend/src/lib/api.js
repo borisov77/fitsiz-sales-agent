@@ -33,6 +33,9 @@ export const api = {
   // --- leads
   leadsList: (params) => request('/api/leads', { query: params }),
   leadCreate: (payload) => request('/api/leads', { method: 'POST', body: payload }),
+  leadCreateManual: (payload) =>
+    request('/api/leads/manual', { method: 'POST', body: payload }),
+  leadCsvTemplateUrl: '/api/leads/csv-template',
   leadGet: (id) => request(`/api/leads/${id}`),
   leadUpdate: (id, payload) => request(`/api/leads/${id}`, { method: 'PATCH', body: payload }),
   leadDelete: (id) => request(`/api/leads/${id}`, { method: 'DELETE' }),

@@ -61,3 +61,28 @@ def init_db() -> None:
     )
 
     Base.metadata.create_all(bind=engine)
+    _ensure_columns()
+
+
+def _ensure_columns() -> None:
+    """Лёгкая авто-миграция: добавляет новые колонки в существующие таблицы.
+
+    create_all() не меняет уже созданные таблицы, поэтому для добавленных полей
+    (например leads.description) нужен идемпотентный ALTER. Только для SQLite/dev.
+    """
+    from sqlalchemy import inspect, text
+
+    # (таблица, колонка, SQL-тип) — добавляем, если колонки ещё нет
+    expected: list[tuple[str, str, str]] = [
+        ("leads", "description", "TEXT"),
+    ]
+    inspector = inspect(engine)
+    with engine.begin() as conn:
+        for table, column, sql_type in expected:
+            if table not in inspector.get_table_names():
+                continue
+            existing = {c["name"] for c in inspector.get_columns(table)}
+            if column not in existing:
+                conn.execute(
+                    text(f'ALTER TABLE {table} ADD COLUMN {column} {sql_type}')
+                )
