@@ -11,6 +11,7 @@ import {
   UserRound,
   Clock,
   Brain,
+  Flame,
   ArrowDownLeft,
   ArrowUpRight,
 } from 'lucide-react'
@@ -19,9 +20,21 @@ import { Card, CardBody } from '../components/Card.jsx'
 import { Button } from '../components/Button.jsx'
 import { Input, Textarea } from '../components/Input.jsx'
 import { Badge } from '../components/Badge.jsx'
-import { FOLLOW_UP_STAGE_RU, volumeLabel } from '../lib/labels.js'
+import {
+  FOLLOW_UP_STAGE_RU,
+  volumeLabel,
+  DIALOG_STATUSES,
+} from '../lib/labels.js'
 
-function MessageBubble({ m, onEdit, onApprove, onSend, onDelete }) {
+function MessageBubble({
+  m,
+  onEdit,
+  onApprove,
+  onSend,
+  onDelete,
+  dialogMode = false,
+  onQualify,
+}) {
   const [editing, setEditing] = useState(false)
   const [subject, setSubject] = useState(m.subject || '')
   const [body, setBody] = useState(m.body_text || '')
@@ -36,6 +49,27 @@ function MessageBubble({ m, onEdit, onApprove, onSend, onDelete }) {
     try {
       await onEdit(m.id, { subject, body_text: body })
       setEditing(false)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  // «Сохранить и отправить» — для диалогового черновика (правка + отправка)
+  const saveAndSend = async () => {
+    setBusy('save')
+    try {
+      await onEdit(m.id, { subject, body_text: body })
+      setEditing(false)
+      await onSend(m.id)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const sendAsIs = async () => {
+    setBusy('send')
+    try {
+      await onSend(m.id)
     } finally {
       setBusy(null)
     }
@@ -88,9 +122,31 @@ function MessageBubble({ m, onEdit, onApprove, onSend, onDelete }) {
             <Button variant="outline" size="sm" onClick={() => setEditing(false)}>
               Отмена
             </Button>
-            <Button size="sm" onClick={save} disabled={busy === 'save'}>
-              {busy === 'save' ? 'Сохраняю…' : 'Сохранить'}
-            </Button>
+            {dialogMode && isDraft ? (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={save}
+                  disabled={busy === 'save'}
+                >
+                  {busy === 'save' ? 'Сохраняю…' : 'Сохранить'}
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={saveAndSend}
+                  disabled={busy === 'save'}
+                >
+                  <Send size={13} />{' '}
+                  {busy === 'save' ? 'Отправляю…' : 'Сохранить и отправить'}
+                </Button>
+              </>
+            ) : (
+              <Button size="sm" onClick={save} disabled={busy === 'save'}>
+                {busy === 'save' ? 'Сохраняю…' : 'Сохранить'}
+              </Button>
+            )}
           </div>
         </div>
       ) : (
@@ -118,7 +174,44 @@ function MessageBubble({ m, onEdit, onApprove, onSend, onDelete }) {
         </>
       )}
 
-      {isOut && (isDraft || isQueued) && !editing && (
+      {/* Диалоговый черновик: три явные кнопки рабочей зоны */}
+      {isOut && isDraft && dialogMode && !editing && (
+        <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={sendAsIs}
+            disabled={busy === 'send'}
+          >
+            <Send size={13} />{' '}
+            {busy === 'send' ? 'Отправляю…' : 'Отправить как есть'}
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
+            <Pencil size={13} /> Править и отправить
+          </Button>
+          <Button
+            variant="lime"
+            size="sm"
+            onClick={onQualify}
+            title="Будет подключено на шаге 5: статус WARM + письмо менеджеру"
+          >
+            <Flame size={13} /> Квалифицировать → WARM
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              if (confirm('Удалить черновик?')) onDelete(m.id)
+            }}
+            className="!ring-red-500/40 hover:!bg-red-900/20 text-red-400"
+          >
+            <Trash2 size={13} />
+          </Button>
+        </div>
+      )}
+
+      {/* Обычный черновик (cold/follow-up) или queued — прежние действия */}
+      {isOut && !editing && ((isDraft && !dialogMode) || isQueued) && (
         <div className="mt-5 flex flex-wrap justify-end gap-2">
           {isDraft && (
             <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
@@ -231,6 +324,14 @@ export default function ConversationDetail() {
     await load()
   }
 
+  // Заглушка: реальный эндпоинт (status WARM + письмо менеджеру) — шаг 5.
+  const onQualifyWarm = () => {
+    alert(
+      '«Квалифицировать → WARM» будет подключено на шаге 5:\n' +
+        'статус лида → WARM и авто-письмо живому менеджеру.',
+    )
+  }
+
   if (!data && !err)
     return (
       <div className="p-10 text-[15px] text-fitsiz-muted">загрузка…</div>
@@ -239,6 +340,7 @@ export default function ConversationDetail() {
     return <div className="p-10 text-[15px] text-red-400">Ошибка: {err}</div>
 
   const hasIncoming = data.messages.some((m) => m.direction === 'incoming')
+  const isDialog = DIALOG_STATUSES.includes(data.lead_status)
 
   return (
     <div className="p-10">
@@ -375,6 +477,8 @@ export default function ConversationDetail() {
               onApprove={onApprove}
               onSend={onSend}
               onDelete={onDelete}
+              dialogMode={isDialog}
+              onQualify={onQualifyWarm}
             />
           ))
         )}

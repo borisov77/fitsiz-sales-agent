@@ -442,7 +442,8 @@ def send_now(
             attachments=msg.attachments,
             in_reply_to=anchor,
             references=refs or None,
-            append_signature=msg.ai_prompt_used != "cold_template",
+            append_signature=msg.ai_prompt_used
+            not in ("cold_template", "cold_reminder"),
         )
     except EmailSendError as exc:
         msg.status = MessageStatus.failed

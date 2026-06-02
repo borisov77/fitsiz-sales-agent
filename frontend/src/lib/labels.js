@@ -14,7 +14,34 @@ export const LEAD_STATUS_RU = {
   transferred: 'Передан',
   rejected: 'Отказ',
   unsubscribed: 'Отписался',
+  dead_email: 'Архив',
 }
+
+// Бакет «диалога» — рабочая зона человека (лид ответил, ведём переписку).
+export const DIALOG_STATUSES = ['replied', 'interested', 'negotiating']
+
+// Разделы списка переписок. Порядок = порядок вывода: рабочая зона сверху.
+// follow_up_2/3 — легаси (новый follow_up_job их не создаёт), но держим их в
+// «Холодных», чтобы старые лиды не пропадали из списка.
+export const CONVERSATION_SECTIONS = [
+  {
+    key: 'dialog',
+    title: 'Начался диалог',
+    statuses: ['replied', 'interested', 'negotiating'],
+    main: true,
+  },
+  {
+    key: 'cold',
+    title: 'Холодные',
+    statuses: ['new', 'contacted', 'follow_up_1', 'follow_up_2', 'follow_up_3'],
+  },
+  { key: 'warm', title: 'Тёплые', statuses: ['warm', 'transferred'] },
+  {
+    key: 'archive',
+    title: 'Архив',
+    statuses: ['dead_email', 'rejected', 'unsubscribed'],
+  },
+]
 
 export const MESSAGE_STATUS_RU = {
   draft: 'Черновик',

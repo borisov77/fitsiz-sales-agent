@@ -90,13 +90,16 @@ def _save_incoming(
 
     # Обновляем состояние лида
     lead.last_contact_at = datetime.utcnow()
-    # Первый реальный ответ: статус → replied (если лид ещё в воронке)
+    # Первый реальный ответ: статус → replied (если лид ещё в холодной зоне).
+    # dead_email включён намеренно: «мёртвый» лид, который вдруг ответил,
+    # должен подняться обратно в диалог, а не остаться в архиве.
     transitions = {
         LeadStatus.new,
         LeadStatus.contacted,
         LeadStatus.follow_up_1,
         LeadStatus.follow_up_2,
         LeadStatus.follow_up_3,
+        LeadStatus.dead_email,
     }
     if lead.status in transitions:
         lead.status = LeadStatus.replied

@@ -36,6 +36,7 @@ class LeadStatus(str, enum.Enum):
     transferred = "transferred"    # передан менеджеру
     rejected = "rejected"          # отказ
     unsubscribed = "unsubscribed"  # попросил не писать
+    dead_email = "dead_email"      # холодный лид не ответил за 5 дней — архив/стоп
 
 
 def _uuid() -> str:
