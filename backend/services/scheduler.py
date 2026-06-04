@@ -286,27 +286,37 @@ def follow_up_job() -> None:
 # ==========================
 # Job 4: Авто-черновик ответа на входящее (Зона 2)
 # ==========================
+# Метки результата на ВХОДЯЩЕМ письме (поле Message.ai_prompt_used).
+# Колонка уже существует — отдельной миграции БД не требуется.
+AUTODRAFT_DONE = "autodraft:done"        # черновик создан → больше не трогаем
+AUTODRAFT_SILENT = "autodraft:silent"    # AI решил молчать → больше не трогаем
+AUTODRAFT_ERR_PREFIX = "autodraft:err:"  # "autodraft:err:N" — N неудачных попыток
+AUTODRAFT_MAX_RETRIES = 3                 # после N сбоев — оставляем человеку
+
+
 def auto_draft_reply_job() -> None:
-    """Зона 2 (диалог): на свежее входящее генерим ЧЕРНОВИК ответа через AI.
+    """Зона 2 (диалог): на НОВОЕ входящее генерим ЧЕРНОВИК ответа через AI.
 
     Отдельная задача — НЕ внутри email_reader: сбой AI (нет ключа, таймаут)
     здесь никогда не затронет IMAP-приём писем. Приём важнее генерации.
 
     Черновик ВСЕГДА status=draft (НЕ зависит от AUTO_SEND) — диалоговый поток
-    гейтит человек кнопкой в дашборде. Статус лида тут НЕ двигаем (warm/передачу
-    решает человек на шаге «Квалифицировать»).
+    гейтит человек кнопкой в дашборде. Статус лида тут НЕ двигаем.
 
-    Условие генерации: у лида в диалоговом бакете есть входящее, на которое мы
-    ещё ничем не ответили (нет исходящего письма после него). Автоответчики
-    пропускаем.
+    Защита от холостых перегенераций: КАЖДОЕ обработанное входящее помечается
+    на самом письме (Message.ai_prompt_used) — done / silent / err:N. Запрос
+    исключает уже терминально помеченные, поэтому AI вызывается РОВНО один раз
+    на каждое новое входящее (а при ошибке — не более AUTODRAFT_MAX_RETRIES).
     """
-    from backend.services.ai_engine import handle_reply, AIEngineError
+    from backend.services.ai_engine import handle_reply
 
     DIALOG_BUCKET = [
         LeadStatus.replied,
         LeadStatus.interested,
         LeadStatus.negotiating,
     ]
+    # Терминальные метки — такие входящие AI больше не трогает
+    TERMINAL = (AUTODRAFT_DONE, AUTODRAFT_SILENT, "detected:autoreply")
 
     with SessionLocal() as db:
         leads = list(
@@ -341,45 +351,61 @@ def auto_draft_reply_job() -> None:
             if not incomings:
                 continue
             last_incoming = incomings[-1]
+            mark = last_incoming.ai_prompt_used or ""
 
-            # Автоответчик — не отвечаем
-            if last_incoming.ai_prompt_used == "detected:autoreply":
+            # Уже обработано терминально (черновик/молчание/автоответчик) — пропуск
+            if mark in TERMINAL:
                 continue
 
-            # Уже ответили (есть исходящее не раньше последнего входящего)?
+            # Исчерпан ретрай-кап по ошибкам — оставляем лид человеку
+            if mark.startswith(AUTODRAFT_ERR_PREFIX):
+                try:
+                    attempts = int(mark[len(AUTODRAFT_ERR_PREFIX):])
+                except ValueError:
+                    attempts = 0
+                if attempts >= AUTODRAFT_MAX_RETRIES:
+                    continue
+            else:
+                attempts = 0
+
+            # Бэкап-страж: на это входящее уже ответили (человек/прошлый прогон) —
+            # помечаем done и не зовём AI.
             already = any(
                 m.direction == MessageDirection.outgoing
                 and m.created_at >= last_incoming.created_at
                 for m in msgs
             )
             if already:
+                last_incoming.ai_prompt_used = AUTODRAFT_DONE
+                db.commit()
                 continue
 
             # --- Генерация. Любой сбой AI НЕ роняет задачу (per-lead) ---
             try:
                 draft = handle_reply(lead, msgs, last_incoming)
-            except AIEngineError as exc:
+            except Exception as exc:  # noqa: BLE001 — AIEngineError и прочее
+                # ВРЕМЕННЫЙ сбой: инкрементируем счётчик, но не метим навсегда.
+                attempts += 1
+                last_incoming.ai_prompt_used = f"{AUTODRAFT_ERR_PREFIX}{attempts}"
+                db.commit()
                 log.error(
-                    "[scheduler] auto_draft: AI-сбой для %s (%s) — входящее принято, "
-                    "черновик не создан: %s",
+                    "[scheduler] auto_draft: AI-сбой для %s (%s), попытка %d/%d — "
+                    "входящее принято, черновик не создан: %s",
                     lead.id,
                     lead.company_name,
-                    exc,
-                )
-                continue
-            except Exception as exc:  # noqa: BLE001 — задача не должна падать
-                log.error(
-                    "[scheduler] auto_draft: непредвиденная ошибка для %s: %s",
-                    lead.id,
+                    attempts,
+                    AUTODRAFT_MAX_RETRIES,
                     exc,
                 )
                 continue
 
-            # AI решил промолчать (автоответ/вне зоны) — черновик не создаём
+            # AI решил промолчать — метим НАВСЕГДА, повторно не дёргаем
             if not draft.should_send:
+                last_incoming.ai_prompt_used = AUTODRAFT_SILENT
+                db.commit()
                 log.info(
                     "[scheduler] auto_draft: AI рекомендует молчать (intent=%s) — "
-                    "лид %s, черновик пропущен",
+                    "лид %s, помечено silent",
                     draft.intent,
                     lead.id,
                 )
@@ -399,6 +425,7 @@ def auto_draft_reply_job() -> None:
                 created_at=datetime.utcnow(),
             )
             db.add(reply)
+            last_incoming.ai_prompt_used = AUTODRAFT_DONE  # метим обработанным
             db.commit()
             log.info(
                 "[scheduler] auto_draft: черновик ответа создан для %s (%s), intent=%s",
@@ -442,7 +469,7 @@ def start_scheduler() -> None:
     scheduler.add_job(
         auto_draft_reply_job,
         "interval",
-        seconds=120,  # Зона 2: черновик ответа вскоре после входящего
+        seconds=600,  # Зона 2: не чаще приёма почты (check_inbox=600s)
         id="auto_draft_reply",
         replace_existing=True,
         max_instances=1,
@@ -450,7 +477,7 @@ def start_scheduler() -> None:
 
     scheduler.start()
     log.info(
-        "[scheduler] Запущен: inbox %ds, queued 60s, follow-up 1800s, auto-draft 120s",
+        "[scheduler] Запущен: inbox %ds, queued 60s, follow-up 1800s, auto-draft 600s",
         interval_inbox,
     )
 
