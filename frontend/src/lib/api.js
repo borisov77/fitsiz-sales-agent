@@ -46,16 +46,22 @@ export const api = {
   leadGet: (id) => request(`/api/leads/${id}`),
   leadUpdate: (id, payload) => request(`/api/leads/${id}`, { method: 'PATCH', body: payload }),
   leadDelete: (id) => request(`/api/leads/${id}`, { method: 'DELETE' }),
-  leadTransfer: (id, manager = 'manager') =>
-    request(`/api/leads/${id}/transfer`, { method: 'POST', query: { manager } }),
   leadNotifyManager: (id) =>
     request(`/api/leads/${id}/notify-manager`, { method: 'POST' }),
+  leadReactivate: (id) =>
+    request(`/api/leads/${id}/reactivate`, { method: 'POST' }),
   launchCampaign: (leadIds) =>
     request('/api/leads/launch-campaign', {
       method: 'POST',
       body: { lead_ids: leadIds },
     }),
   campaignStatus: () => request('/api/campaign/status'),
+  campaignFunnel: () => request('/api/campaign/funnel'),
+  closeDeal: (id, outcome, close_reason) =>
+    request(`/api/leads/${id}/close-deal`, {
+      method: 'POST',
+      body: { outcome, close_reason },
+    }),
   leadsImport: (file, campaignId) => {
     const fd = new FormData()
     fd.append('file', file)
@@ -77,11 +83,8 @@ export const api = {
       method: 'POST',
       query: incomingMessageId ? { incoming_message_id: incomingMessageId } : undefined,
     }),
-  draftFollowUp: (leadId, stage = 'follow_up_1') =>
-    request(`/api/conversations/${leadId}/draft-followup`, {
-      method: 'POST',
-      query: { stage },
-    }),
+  draftFollowUp: (leadId) =>
+    request(`/api/conversations/${leadId}/draft-followup`, { method: 'POST' }),
   qualify: (leadId) =>
     request(`/api/conversations/${leadId}/qualify`, { method: 'POST' }),
   messageEdit: (id, payload) =>
@@ -124,6 +127,13 @@ export const api = {
   coldTemplateGet: () => request('/api/settings/cold-template'),
   coldTemplateSave: (tpl) =>
     request('/api/settings/cold-template', { method: 'PUT', body: tpl }),
+  settingsSetColdTiming: (reminder_delay_days, no_reply_days) =>
+    request('/api/settings/cold-timing', {
+      method: 'PUT',
+      body: { reminder_delay_days, no_reply_days },
+    }),
+  settingsSetAiToken: (token) =>
+    request('/api/settings/ai-token', { method: 'PUT', body: { token } }),
 
   // --- documents (два фиксированных слота)
   documents: () => request('/api/documents'),

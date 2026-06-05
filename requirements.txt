@@ -6,6 +6,8 @@ python-multipart==0.0.12
 # --- DB / ORM ---
 sqlalchemy==2.0.35
 alembic==1.13.3
+# Postgres-драйвер (Supabase). SQLite остаётся в stdlib, драйвер не нужен.
+psycopg2-binary==2.9.9
 
 # --- Settings / env ---
 pydantic==2.9.2
@@ -23,6 +25,9 @@ imapclient==3.0.1
 
 # --- AI ---
 anthropic==0.39.0
+
+# --- Шифрование секретов в БД (AI-токен at-rest, Fernet) ---
+cryptography==43.0.1
 
 # --- Scheduler ---
 apscheduler==3.10.4

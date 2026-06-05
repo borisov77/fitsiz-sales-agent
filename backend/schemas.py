@@ -59,6 +59,7 @@ class LeadUpdate(BaseModel):
     campaign_id: str | None = None
     assigned_to: str | None = None
     next_action_at: datetime | None = None
+    close_reason: str | None = None
 
 
 class LeadRead(LeadBase):
@@ -72,6 +73,8 @@ class LeadRead(LeadBase):
     updated_at: datetime
     last_contact_at: datetime | None
     next_action_at: datetime | None
+    close_reason: str | None = None
+    closed_at: datetime | None = None
 
 
 class ImportResult(BaseModel):

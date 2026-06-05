@@ -22,9 +22,16 @@ KEY_MANAGER_EMAILS = "manager_emails"
 KEY_AUTO_TRANSFER = "auto_transfer_to_manager"
 KEY_AUTO_SEND = "auto_send"
 KEY_NEXT_COLD_SEND_AT = "next_cold_send_at"
+KEY_REMINDER_DELAY_DAYS = "reminder_delay_days"
+KEY_NO_REPLY_DAYS = "no_reply_days"
+KEY_AI_TOKEN = "ai_token_encrypted"  # в value — ТОЛЬКО шифртекст Fernet
 
 MAX_MANAGER_EMAILS = 5
 _EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+
+# Дефолты сроков холодной зоны (если в БД ничего не выставлено)
+DEFAULT_REMINDER_DELAY_DAYS = 3
+DEFAULT_NO_REPLY_DAYS = 14
 
 
 # ==========================
@@ -180,3 +187,120 @@ def get_next_cold_send_at(db: Session) -> datetime | None:
 
 def set_next_cold_send_at(db: Session, when: datetime) -> None:
     _set(db, KEY_NEXT_COLD_SEND_AT, when.isoformat())
+
+
+# ==========================
+# Сроки холодной зоны (reminder_delay_days / no_reply_days)
+# ==========================
+class ColdTimingError(ValueError):
+    """Некорректная пара сроков холодной зоны."""
+
+
+def get_reminder_delay_days(db: Session) -> int:
+    raw = _get(db, KEY_REMINDER_DELAY_DAYS)
+    if raw is None:
+        return DEFAULT_REMINDER_DELAY_DAYS
+    try:
+        return int(raw)
+    except ValueError:
+        return DEFAULT_REMINDER_DELAY_DAYS
+
+
+def get_no_reply_days(db: Session) -> int:
+    raw = _get(db, KEY_NO_REPLY_DAYS)
+    if raw is None:
+        return DEFAULT_NO_REPLY_DAYS
+    try:
+        return int(raw)
+    except ValueError:
+        return DEFAULT_NO_REPLY_DAYS
+
+
+def set_cold_timing(db: Session, reminder_delay_days: int, no_reply_days: int) -> dict[str, int]:
+    """Сохраняет пару сроков. Правило: 0 < reminder_delay_days < no_reply_days."""
+    try:
+        r = int(reminder_delay_days)
+        n = int(no_reply_days)
+    except (TypeError, ValueError) as exc:
+        raise ColdTimingError("Сроки должны быть целыми числами") from exc
+    if r <= 0:
+        raise ColdTimingError("Срок до напоминания должен быть больше 0")
+    if n <= 0:
+        raise ColdTimingError("Срок до «без ответа» должен быть больше 0")
+    if r >= n:
+        raise ColdTimingError(
+            f"Срок до напоминания ({r}) должен быть строго меньше срока "
+            f"до «без ответа» ({n})"
+        )
+    _set(db, KEY_REMINDER_DELAY_DAYS, str(r))
+    _set(db, KEY_NO_REPLY_DAYS, str(n))
+    return {"reminder_delay_days": r, "no_reply_days": n}
+
+
+# ==========================
+# AI-токен (Anthropic) — at-rest шифрование (Fernet)
+# ==========================
+def set_ai_token(db: Session, plaintext: str | None) -> None:
+    """Сохраняет AI-токен в БД ТОЛЬКО зашифрованным. Пустое значение → очистка
+    (тогда работает fallback на .env ANTHROPIC_API_KEY)."""
+    from backend.services import crypto
+
+    value = (plaintext or "").strip()
+    if not value:
+        _clear(db, KEY_AI_TOKEN)
+        return
+    ciphertext = crypto.encrypt(value)  # бросит CryptoError, если ключ не задан
+    _set(db, KEY_AI_TOKEN, ciphertext)
+
+
+def get_ai_token(db: Session) -> str | None:
+    """Действующий ключ: расшифрованный из БД → иначе .env ANTHROPIC_API_KEY.
+
+    Никогда не логирует значение. При проблеме расшифровки молча падает на .env.
+    """
+    import logging
+
+    from backend.services import crypto
+
+    raw = _get(db, KEY_AI_TOKEN)
+    if raw:
+        try:
+            return crypto.decrypt(raw)
+        except crypto.CryptoError:
+            logging.getLogger(__name__).warning(
+                "AI-токен в БД не расшифровывается (ключ сменился?) — fallback на .env"
+            )
+    return settings.anthropic_api_key or None
+
+
+def ai_token_status(db: Session) -> dict[str, object]:
+    """Безопасная сводка для фронта: задан ли токен, маска, источник.
+
+    Plaintext НЕ возвращается никогда — только маска вида sk-ant…last4.
+    """
+    from backend.services import crypto
+
+    source: str | None = None
+    token: str | None = None
+
+    raw = _get(db, KEY_AI_TOKEN)
+    if raw:
+        try:
+            token = crypto.decrypt(raw)
+            source = "db"
+        except crypto.CryptoError:
+            token = None
+    if token is None and settings.anthropic_api_key:
+        token = settings.anthropic_api_key
+        source = "env"
+
+    masked = None
+    if token:
+        masked = (token[:6] + "…" + token[-4:]) if len(token) > 10 else "…" + token[-2:]
+
+    return {
+        "is_set": token is not None,
+        "masked": masked,
+        "source": source,  # 'db' | 'env' | None
+        "can_store_in_db": crypto.is_configured(),
+    }

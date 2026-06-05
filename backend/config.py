@@ -36,6 +36,11 @@ class Settings(BaseSettings):
     anthropic_api_key: str = Field(default="", alias="ANTHROPIC_API_KEY")
     ai_model: str = Field(default="claude-sonnet-4-6", alias="AI_MODEL")
 
+    # --- Шифрование секретов в БД (Fernet) ---
+    # Ключ для at-rest шифрования AI-токена в app_settings. Если пуст —
+    # хранение токена в БД недоступно, работает только fallback на ANTHROPIC_API_KEY.
+    fitsiz_secret_key: str = Field(default="", alias="FITSIZ_SECRET_KEY")
+
     # --- Уведомления менеджеру (email) ---
     manager_email: str = Field(default="", alias="MANAGER_EMAIL")
     manager_name: str = Field(default="", alias="MANAGER_NAME")

@@ -17,7 +17,7 @@ from sqlalchemy import select, and_
 
 from backend.config import settings
 from backend.database import SessionLocal
-from backend.models.lead import Lead, LeadStatus
+from backend.models.lead import ColdStage, Lead, LeadStatus
 from backend.models.message import Message, MessageDirection, MessageStatus
 
 log = logging.getLogger(__name__)
@@ -62,6 +62,7 @@ def send_queued_job() -> None:
         get_next_cold_send_at,
         set_next_cold_send_at,
     )
+    from backend.services.app_settings import get_reminder_delay_days
     from backend.services.cold_template import (
         COLD_REMINDER_MARKER,
         COLD_TEMPLATE_MARKER,
@@ -135,15 +136,18 @@ def send_queued_job() -> None:
         msg.sent_at = result.sent_at
 
         lead.last_contact_at = result.sent_at
-        if lead.status == LeadStatus.new:
-            lead.status = LeadStatus.contacted
+        if lead.status == LeadStatus.created:
+            lead.status = LeadStatus.sent
 
-        # Зона 1: отправили ПЕРВОЕ (cold) письмо → планируем напоминание через 1 день.
-        # Это и есть фикс бага, из-за которого next_action_at оставался None
-        # и follow_up_job никогда не срабатывал. Для напоминания и диалоговых
-        # писем next_action_at тут НЕ трогаем (им управляет follow_up_job / приём).
+        # Зона 1: отправили ПЕРВОЕ (cold) письмо → входим в холодный автомат:
+        # cold_stage=awaiting_reply, через REMINDER_DELAY_DAYS follow_up_job
+        # отправит напоминание. Для напоминания и диалоговых писем next_action_at
+        # тут НЕ трогаем (им управляет follow_up_job / приём почты).
         if msg.ai_prompt_used == COLD_TEMPLATE_MARKER:
-            lead.next_action_at = result.sent_at + timedelta(days=1)
+            lead.cold_stage = ColdStage.awaiting_reply
+            lead.next_action_at = result.sent_at + timedelta(
+                days=get_reminder_delay_days(db)
+            )
 
         # Планируем следующую отправку через рандомные 3-7 минут (антиспам)
         set_next_cold_send_at(
@@ -162,18 +166,20 @@ def send_queued_job() -> None:
 # Job 3: Follow-up автогенерация
 # ==========================
 def follow_up_job() -> None:
-    """Зона 1 (холодный автомат): ОДНО напоминание-шаблон, затем dead_email.
+    """Зона 1 (холодный автомат): ОДНО напоминание-шаблон, затем no_reply.
 
-    Без AI. Два перехода по `next_action_at`:
-      - `contacted` + срок наступил (1 день тишины) → ставим в очередь ОДНО
-        напоминание из ШАБЛОНА (status=queued, НЕЗАВИСИМО от AUTO_SEND),
-        статус → `follow_up_1`, next_action_at = +4 дня.
-      - `follow_up_1` + срок наступил (ещё 4 дня, итого 5 тишины) → больше
-        НЕ пишем: статус → `dead_email`, next_action_at = None.
+    Без AI. Гейт строго по `status==sent` + `cold_stage`. Два перехода по
+    `next_action_at`:
+      - `sent` + `cold_stage=awaiting_reply` + срок (REMINDER_DELAY_DAYS) →
+        ставим в очередь ОДНО напоминание из ШАБЛОНА (status=queued, НЕЗАВИСИМО
+        от AUTO_SEND), `cold_stage=reminder_sent`, next_action_at = +NO_REPLY_DAYS.
+      - `sent` + `cold_stage=reminder_sent` + срок (NO_REPLY_DAYS) → больше
+        НЕ пишем: статус → `no_reply`, cold_stage=None, next_action_at=None.
 
-    Диалоговых лидов (replied/interested/negotiating) сюда не берём — они
-    не входят в фильтр статусов и выходят из холодной автоматики.
+    Диалоговые/закрытые лиды (in_dialog/handed_to_manager/won/lost/no_reply)
+    сюда не попадают — они вне выборки `status==sent`.
     """
+    from backend.services.app_settings import get_no_reply_days
     from backend.services.cold_template import (
         COLD_REMINDER_MARKER,
         ColdTemplateError,
@@ -191,11 +197,7 @@ def follow_up_job() -> None:
                     and_(
                         Lead.next_action_at.is_not(None),
                         Lead.next_action_at <= now,
-                        Lead.status.in_([
-                            LeadStatus.contacted,
-                            LeadStatus.follow_up_1,
-                        ]),
-                        Lead.assigned_to == "agent",
+                        Lead.status == LeadStatus.sent,
                     )
                 )
                 .limit(20)  # порциями, чтобы не перегружать
@@ -210,19 +212,20 @@ def follow_up_job() -> None:
         log.info("[scheduler] follow_up_job: %d лид(ов) к обработке", len(leads))
 
         for lead in leads:
-            # --- Переход 2: follow_up_1 → dead_email (5 дней тишины) ---
-            if lead.status == LeadStatus.follow_up_1:
-                lead.status = LeadStatus.dead_email
+            # --- Переход 2: reminder_sent → no_reply (тишина после напоминания) ---
+            if lead.cold_stage == ColdStage.reminder_sent:
+                lead.status = LeadStatus.no_reply
+                lead.cold_stage = None
                 lead.next_action_at = None
                 db.commit()
                 log.info(
-                    "[scheduler] follow_up: %s (%s) → dead_email (5 дней тишины)",
+                    "[scheduler] follow_up: %s (%s) → no_reply (нет ответа)",
                     lead.id,
                     lead.company_name,
                 )
                 continue
 
-            # --- Переход 1: contacted → одно напоминание из шаблона ---
+            # --- Переход 1: awaiting_reply → одно напоминание из шаблона ---
             if not is_reminder_filled(db):
                 # Без текста напоминания ничего не шлём и НЕ двигаем статус —
                 # лид дождётся, когда шаблон заполнят в Настройках.
@@ -271,167 +274,17 @@ def follow_up_job() -> None:
             )
             db.add(reminder)
 
-            lead.status = LeadStatus.follow_up_1
-            lead.next_action_at = now + timedelta(days=4)
+            no_reply_days = get_no_reply_days(db)
+            lead.cold_stage = ColdStage.reminder_sent
+            lead.next_action_at = now + timedelta(days=no_reply_days)
 
             db.commit()
             log.info(
                 "[scheduler] follow_up: напоминание → очередь для %s (%s); "
-                "dead_email через 4 дня без ответа",
+                "no_reply через %d дн. без ответа",
                 lead.id,
                 lead.company_name,
-            )
-
-
-# ==========================
-# Job 4: Авто-черновик ответа на входящее (Зона 2)
-# ==========================
-# Метки результата на ВХОДЯЩЕМ письме (поле Message.ai_prompt_used).
-# Колонка уже существует — отдельной миграции БД не требуется.
-AUTODRAFT_DONE = "autodraft:done"        # черновик создан → больше не трогаем
-AUTODRAFT_SILENT = "autodraft:silent"    # AI решил молчать → больше не трогаем
-AUTODRAFT_ERR_PREFIX = "autodraft:err:"  # "autodraft:err:N" — N неудачных попыток
-AUTODRAFT_MAX_RETRIES = 3                 # после N сбоев — оставляем человеку
-
-
-def auto_draft_reply_job() -> None:
-    """Зона 2 (диалог): на НОВОЕ входящее генерим ЧЕРНОВИК ответа через AI.
-
-    Отдельная задача — НЕ внутри email_reader: сбой AI (нет ключа, таймаут)
-    здесь никогда не затронет IMAP-приём писем. Приём важнее генерации.
-
-    Черновик ВСЕГДА status=draft (НЕ зависит от AUTO_SEND) — диалоговый поток
-    гейтит человек кнопкой в дашборде. Статус лида тут НЕ двигаем.
-
-    Защита от холостых перегенераций: КАЖДОЕ обработанное входящее помечается
-    на самом письме (Message.ai_prompt_used) — done / silent / err:N. Запрос
-    исключает уже терминально помеченные, поэтому AI вызывается РОВНО один раз
-    на каждое новое входящее (а при ошибке — не более AUTODRAFT_MAX_RETRIES).
-    """
-    from backend.services.ai_engine import handle_reply
-
-    DIALOG_BUCKET = [
-        LeadStatus.replied,
-        LeadStatus.interested,
-        LeadStatus.negotiating,
-    ]
-    # Терминальные метки — такие входящие AI больше не трогает
-    TERMINAL = (AUTODRAFT_DONE, AUTODRAFT_SILENT, "detected:autoreply")
-
-    with SessionLocal() as db:
-        leads = list(
-            db.execute(
-                select(Lead)
-                .where(
-                    and_(
-                        Lead.status.in_(DIALOG_BUCKET),
-                        Lead.assigned_to == "agent",
-                    )
-                )
-                .limit(20)
-            )
-            .scalars()
-            .all()
-        )
-
-        for lead in leads:
-            msgs = list(
-                db.execute(
-                    select(Message)
-                    .where(Message.lead_id == lead.id)
-                    .order_by(Message.created_at)
-                )
-                .scalars()
-                .all()
-            )
-
-            incomings = [
-                m for m in msgs if m.direction == MessageDirection.incoming
-            ]
-            if not incomings:
-                continue
-            last_incoming = incomings[-1]
-            mark = last_incoming.ai_prompt_used or ""
-
-            # Уже обработано терминально (черновик/молчание/автоответчик) — пропуск
-            if mark in TERMINAL:
-                continue
-
-            # Исчерпан ретрай-кап по ошибкам — оставляем лид человеку
-            if mark.startswith(AUTODRAFT_ERR_PREFIX):
-                try:
-                    attempts = int(mark[len(AUTODRAFT_ERR_PREFIX):])
-                except ValueError:
-                    attempts = 0
-                if attempts >= AUTODRAFT_MAX_RETRIES:
-                    continue
-            else:
-                attempts = 0
-
-            # Бэкап-страж: на это входящее уже ответили (человек/прошлый прогон) —
-            # помечаем done и не зовём AI.
-            already = any(
-                m.direction == MessageDirection.outgoing
-                and m.created_at >= last_incoming.created_at
-                for m in msgs
-            )
-            if already:
-                last_incoming.ai_prompt_used = AUTODRAFT_DONE
-                db.commit()
-                continue
-
-            # --- Генерация. Любой сбой AI НЕ роняет задачу (per-lead) ---
-            try:
-                draft = handle_reply(lead, msgs, last_incoming)
-            except Exception as exc:  # noqa: BLE001 — AIEngineError и прочее
-                # ВРЕМЕННЫЙ сбой: инкрементируем счётчик, но не метим навсегда.
-                attempts += 1
-                last_incoming.ai_prompt_used = f"{AUTODRAFT_ERR_PREFIX}{attempts}"
-                db.commit()
-                log.error(
-                    "[scheduler] auto_draft: AI-сбой для %s (%s), попытка %d/%d — "
-                    "входящее принято, черновик не создан: %s",
-                    lead.id,
-                    lead.company_name,
-                    attempts,
-                    AUTODRAFT_MAX_RETRIES,
-                    exc,
-                )
-                continue
-
-            # AI решил промолчать — метим НАВСЕГДА, повторно не дёргаем
-            if not draft.should_send:
-                last_incoming.ai_prompt_used = AUTODRAFT_SILENT
-                db.commit()
-                log.info(
-                    "[scheduler] auto_draft: AI рекомендует молчать (intent=%s) — "
-                    "лид %s, помечено silent",
-                    draft.intent,
-                    lead.id,
-                )
-                continue
-
-            # ВСЕГДА draft — человек решит отправить/править/квалифицировать.
-            # Статус лида НЕ трогаем: остаётся в диалоговом бакете.
-            reply = Message(
-                lead_id=lead.id,
-                direction=MessageDirection.outgoing,
-                subject=draft.subject,
-                body_text=draft.body_text,
-                attachments=draft.attachments or None,
-                in_reply_to=last_incoming.email_message_id,
-                status=MessageStatus.draft,
-                ai_prompt_used=f"reply_handler:auto:intent={draft.intent}",
-                created_at=datetime.utcnow(),
-            )
-            db.add(reply)
-            last_incoming.ai_prompt_used = AUTODRAFT_DONE  # метим обработанным
-            db.commit()
-            log.info(
-                "[scheduler] auto_draft: черновик ответа создан для %s (%s), intent=%s",
-                lead.id,
-                lead.company_name,
-                draft.intent,
+                no_reply_days,
             )
 
 
@@ -466,18 +319,14 @@ def start_scheduler() -> None:
         replace_existing=True,
         max_instances=1,
     )
-    scheduler.add_job(
-        auto_draft_reply_job,
-        "interval",
-        seconds=600,  # Зона 2: не чаще приёма почты (check_inbox=600s)
-        id="auto_draft_reply",
-        replace_existing=True,
-        max_instances=1,
-    )
+    # ВАЖНО: авто-черновик ответа (Зона 2) ОТКЛЮЧЁН намеренно. Диалоговые ответы
+    # генерятся СТРОГО вручную — по кнопке «Ответить AI» (POST /draft-reply).
+    # Это исключает холостые AI-вызовы на каждое входящее (утечка токенов).
 
     scheduler.start()
     log.info(
-        "[scheduler] Запущен: inbox %ds, queued 60s, follow-up 1800s, auto-draft 600s",
+        "[scheduler] Запущен: inbox %ds, queued 60s, follow-up 1800s "
+        "(auto-draft ОТКЛЮЧЁН — диалог только вручную)",
         interval_inbox,
     )
 

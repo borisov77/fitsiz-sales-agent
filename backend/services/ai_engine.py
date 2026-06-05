@@ -1,10 +1,12 @@
 """AI-мозг агента: обёртка над Anthropic API.
 
 Функции:
-  - generate_cold_email(lead)         — первое холодное письмо
   - handle_reply(lead, incoming_msg)  — ответ на входящее
-  - generate_follow_up(lead, stage)   — follow-up 1/2/3
+  - generate_follow_up(lead, stage)   — ручной AI-follow-up в диалоге
   - qualify_lead(lead)                — оценка интереса/готовности/объёма
+
+Примечание: первое (cold) письмо НЕ генерируется AI — оно собирается из
+шаблона (services/cold_template.py). Отдельного AI-генератора cold-письма нет.
 
 Ключевые решения:
   - Промпты и база знаний читаются из .md (hot-reload не нужен: они меняются
@@ -121,44 +123,43 @@ def _build_system_prompt() -> str:
 # Anthropic client
 # ==========================
 _client = None
+_client_key: str | None = None  # ключ, на котором собран кешированный клиент
+
+
+def _resolve_api_key() -> str:
+    """Действующий ключ: из БД (расшифровка) → иначе .env. Значение НЕ логируем."""
+    from backend.database import SessionLocal
+    from backend.services.app_settings import get_ai_token
+
+    with SessionLocal() as db:
+        return get_ai_token(db) or ""
 
 
 def _get_client():
-    """Ленивая инициализация — тесты парсеров/шаблонов не требуют API-ключа."""
-    global _client
-    if _client is not None:
+    """Ленивая инициализация. Клиент пересобирается при смене ключа (без рестарта)."""
+    global _client, _client_key
+
+    api_key = _resolve_api_key()
+    if not api_key:
+        raise AIEngineError(
+            "AI-токен не задан — укажите его в Настройках или ANTHROPIC_API_KEY в .env"
+        )
+    if _client is not None and _client_key == api_key:
         return _client
-    if not settings.anthropic_api_key:
-        raise AIEngineError("ANTHROPIC_API_KEY не задан в .env")
     try:
         from anthropic import Anthropic  # ленивый импорт
     except ImportError as exc:  # pragma: no cover
         raise AIEngineError(
             "Пакет `anthropic` не установлен: pip install anthropic"
         ) from exc
-    _client = Anthropic(api_key=settings.anthropic_api_key)
+    _client = Anthropic(api_key=api_key)
+    _client_key = api_key
     return _client
 
 
 # ==========================
 # JSON tools (структурированный вывод)
 # ==========================
-def _tool_cold_email() -> dict[str, Any]:
-    return {
-        "name": "draft_cold_email",
-        "description": "Возврат первого cold-письма для лида",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "subject": {"type": "string"},
-                "body_text": {"type": "string"},
-                "reasoning": {"type": "string"},
-            },
-            "required": ["subject", "body_text"],
-        },
-    }
-
-
 def _tool_reply() -> dict[str, Any]:
     return {
         "name": "draft_reply",
@@ -182,14 +183,9 @@ def _tool_reply() -> dict[str, Any]:
                 "new_status": {
                     "type": "string",
                     "enum": [
-                        "contacted",
-                        "replied",
-                        "interested",
-                        "negotiating",
-                        "warm",
-                        "transferred",
-                        "rejected",
-                        "unsubscribed",
+                        "in_dialog",          # продолжаем переписку
+                        "handed_to_manager",  # готов к сделке → менеджеру
+                        "lost",               # отказ / отписка
                     ],
                 },
                 "reply_subject": {"type": "string"},
@@ -229,6 +225,27 @@ def _tool_follow_up() -> dict[str, Any]:
                 "reasoning": {"type": "string"},
             },
             "required": ["subject", "body_text"],
+        },
+    }
+
+
+def _tool_manager_brief() -> dict[str, Any]:
+    return {
+        "name": "manager_brief",
+        "description": "Извлечь контакты ЛПР и резюме переписки для брифа менеджеру",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "contact_name": {"type": "string", "description": "ФИО ЛПР, '' если не найдено"},
+                "contact_position": {"type": "string", "description": "должность, '' если не найдено"},
+                "contact_phone": {"type": "string", "description": "телефон, '' если не найдено"},
+                "contact_email": {"type": "string", "description": "email, '' если не найдено"},
+                "summary": {
+                    "type": "string",
+                    "description": "о чём договорились: что спрашивали, что интересно, на чём остановились",
+                },
+            },
+            "required": ["summary"],
         },
     }
 
@@ -334,6 +351,21 @@ class ReplyDraft(DraftEmail):
 
 
 @dataclass
+class ManagerBrief:
+    contact_name: str = ""
+    contact_position: str = ""
+    contact_phone: str = ""
+    contact_email: str = ""
+    summary: str = ""
+    raw: dict[str, Any] = field(default_factory=dict)
+
+    def has_contacts(self) -> bool:
+        return any(
+            (self.contact_name, self.contact_position, self.contact_phone, self.contact_email)
+        )
+
+
+@dataclass
 class QualifierResult:
     interest_score: int
     buying_readiness: int
@@ -382,30 +414,6 @@ def _sent_documents(messages: list[Message]) -> list[str]:
 # ==========================
 # Публичный API
 # ==========================
-def generate_cold_email(lead: Lead) -> DraftEmail:
-    """Генерирует первое холодное письмо для лида."""
-    user_prompt = _render(
-        _load_prompt("cold_email"),
-        company_name=lead.company_name,
-        contact_name=lead.contact_name,
-        city=lead.city,
-        region=lead.region,
-        company_type=(lead.company_type.value if lead.company_type else "other"),
-        specialization=lead.specialization,
-        description=lead.description,
-        source=lead.source,
-        notes=lead.notes,
-    )
-    data = _call_with_tool(user_prompt, _tool_cold_email(), max_tokens=800)
-    return DraftEmail(
-        subject=data.get("subject", "FITSIZ"),
-        body_text=data.get("body_text", ""),
-        reasoning=data.get("reasoning", ""),
-        ai_prompt_used="cold_email",
-        raw=data,
-    )
-
-
 def handle_reply(
     lead: Lead,
     messages: list[Message],
@@ -422,7 +430,7 @@ def handle_reply(
         company_name=lead.company_name,
         city=lead.city,
         contact_name=lead.contact_name,
-        lead_status=lead.status.value if lead.status else "new",
+        lead_status=lead.status.value if lead.status else "created",
         sent_documents=", ".join(_sent_documents(messages)) or "(ещё ничего)",
         conversation_history=history,
         incoming_message=incoming_view,
@@ -445,9 +453,8 @@ def handle_reply(
 def generate_follow_up(
     lead: Lead,
     messages: list[Message],
-    stage: str,
 ) -> DraftEmail:
-    """Генерирует follow-up (stage — 'follow_up_1' | 'follow_up_2' | 'follow_up_3')."""
+    """Генерирует ОДНО ручное напоминание-нудж в диалоге (без стадий)."""
     outgoing = [m for m in messages if m.direction == MessageDirection.outgoing]
     last = outgoing[-1] if outgoing else None
     last_subject = last.subject if last else "(нет)"
@@ -460,11 +467,10 @@ def generate_follow_up(
         _load_prompt("follow_up"),
         company_name=lead.company_name,
         contact_name=lead.contact_name,
-        lead_status=lead.status.value if lead.status else "contacted",
+        lead_status=lead.status.value if lead.status else "sent",
         last_outgoing_subject=last_subject,
         last_outgoing_days_ago=days_ago,
         sent_documents=", ".join(_sent_documents(messages)) or "(ничего)",
-        follow_up_stage=stage,
     )
     data = _call_with_tool(user_prompt, _tool_follow_up(), max_tokens=700)
     return DraftEmail(
@@ -472,7 +478,36 @@ def generate_follow_up(
         body_text=data.get("body_text", ""),
         attachments=_filter_attachments(data.get("attachments")),
         reasoning=data.get("reasoning", ""),
-        ai_prompt_used=f"follow_up:{stage}",
+        ai_prompt_used="follow_up",
+        raw=data,
+    )
+
+
+def build_manager_brief(lead: Lead, messages: list[Message]) -> ManagerBrief:
+    """Извлекает контакты ЛПР и резюме переписки для брифа менеджеру.
+
+    Бросает AIEngineError при сбое — вызывающая сторона (manager_notifier)
+    оборачивает в try/except и шлёт репорт без AI-части.
+    """
+    user_prompt = _render(
+        _load_prompt("manager_brief"),
+        company_name=lead.company_name,
+        city=lead.city,
+        specialization=lead.specialization,
+        contact_name=lead.contact_name,
+        phone=lead.phone,
+        email=lead.email,
+        conversation_history=_format_history(messages),
+    )
+    data = _call_with_tool(
+        user_prompt, _tool_manager_brief(), max_tokens=900, temperature=0.3
+    )
+    return ManagerBrief(
+        contact_name=str(data.get("contact_name", "")).strip(),
+        contact_position=str(data.get("contact_position", "")).strip(),
+        contact_phone=str(data.get("contact_phone", "")).strip(),
+        contact_email=str(data.get("contact_email", "")).strip(),
+        summary=str(data.get("summary", "")).strip(),
         raw=data,
     )
 
@@ -485,7 +520,7 @@ def qualify_lead(lead: Lead, messages: list[Message]) -> QualifierResult:
         company_type=lead.company_type.value if lead.company_type else "other",
         city=lead.city,
         specialization=lead.specialization,
-        lead_status=lead.status.value if lead.status else "new",
+        lead_status=lead.status.value if lead.status else "created",
         notes=lead.notes,
         conversation_history=_format_history(messages),
     )

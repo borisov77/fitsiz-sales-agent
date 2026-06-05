@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { FileKey2, Send, UserCheck, Users, Trash2, Plus, ArrowRightLeft, Rocket, Mail } from 'lucide-react'
+import { FileKey2, Send, UserCheck, Users, Trash2, Plus, ArrowRightLeft, Rocket, Mail, Clock, KeyRound } from 'lucide-react'
 import { Card, CardBody, CardHeader, CardTitle } from '../components/Card.jsx'
 import { Button } from '../components/Button.jsx'
 import { Input, Textarea } from '../components/Input.jsx'
@@ -276,6 +276,242 @@ function ColdTemplateCard() {
   )
 }
 
+function ColdTimingCard() {
+  const [reminder, setReminder] = useState('')
+  const [noReply, setNoReply] = useState('')
+  const [loaded, setLoaded] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState(null)
+
+  const load = async () => {
+    try {
+      const s = await api.settingsGet()
+      setReminder(String(s.reminder_delay_days))
+      setNoReply(String(s.no_reply_days))
+      setLoaded(true)
+    } catch (e) {
+      setMsg({ ok: false, text: e.message })
+    }
+  }
+  useEffect(() => {
+    load()
+  }, [])
+
+  const save = async () => {
+    setBusy(true)
+    setMsg(null)
+    try {
+      const r = parseInt(reminder, 10)
+      const n = parseInt(noReply, 10)
+      if (!Number.isFinite(r) || !Number.isFinite(n))
+        throw new Error('Введите целые числа')
+      if (r <= 0 || n <= 0) throw new Error('Сроки должны быть больше 0')
+      if (r >= n)
+        throw new Error('Срок до напоминания должен быть меньше срока до «без ответа»')
+      const s = await api.settingsSetColdTiming(r, n)
+      setReminder(String(s.reminder_delay_days))
+      setNoReply(String(s.no_reply_days))
+      setMsg({ ok: true, text: 'Сроки сохранены' })
+    } catch (e) {
+      setMsg({ ok: false, text: e.message })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const label = 'mb-1.5 block text-[12px] uppercase tracking-badge text-fitsiz-muted'
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Clock size={16} className="text-fitsiz-green" />
+          Сроки холодной зоны
+        </CardTitle>
+      </CardHeader>
+      <CardBody className="space-y-4">
+        <p className="text-[14px] text-fitsiz-muted-light leading-relaxed">
+          После отправки холодного письма агент ждёт{' '}
+          <b className="text-fitsiz-white">срок до напоминания</b>, затем шлёт одно
+          напоминание. Если и после этого тишина в течение{' '}
+          <b className="text-fitsiz-white">срока до «без ответа»</b> — лид уходит
+          в статус «Осталось без ответа».
+        </p>
+        <div className="flex flex-wrap gap-5">
+          <div>
+            <label className={label}>Срок до напоминания (дней)</label>
+            <Input
+              type="number"
+              min={1}
+              value={reminder}
+              onChange={(e) => setReminder(e.target.value)}
+              className="max-w-[160px]"
+              disabled={!loaded}
+            />
+          </div>
+          <div>
+            <label className={label}>Срок до «без ответа» (дней)</label>
+            <Input
+              type="number"
+              min={1}
+              value={noReply}
+              onChange={(e) => setNoReply(e.target.value)}
+              className="max-w-[160px]"
+              disabled={!loaded}
+            />
+          </div>
+        </div>
+        <div className="rounded-chip border border-fitsiz-border bg-fitsiz-black/40 p-3 text-[13px] text-fitsiz-muted-light">
+          Правило: <b className="text-fitsiz-white">напоминание &lt; без ответа</b>.
+          Срок до напоминания должен быть строго меньше срока до «без ответа».
+        </div>
+        <div className="flex items-center gap-4">
+          <Button variant="primary" size="md" onClick={save} disabled={busy || !loaded}>
+            {busy ? 'Сохранение…' : 'Сохранить сроки'}
+          </Button>
+          {msg && (
+            <span className={'text-[14px] ' + (msg.ok ? 'text-fitsiz-green' : 'text-red-400')}>
+              {msg.text}
+            </span>
+          )}
+        </div>
+      </CardBody>
+    </Card>
+  )
+}
+
+function AiTokenCard() {
+  const [status, setStatus] = useState(null) // {ai_token_set, ai_token_masked, ai_token_source, ai_token_can_store_in_db}
+  const [token, setToken] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState(null)
+
+  const load = async () => {
+    try {
+      const s = await api.settingsGet()
+      setStatus(s)
+    } catch (e) {
+      setMsg({ ok: false, text: e.message })
+    }
+  }
+  useEffect(() => {
+    load()
+  }, [])
+
+  const save = async () => {
+    setBusy(true)
+    setMsg(null)
+    try {
+      const s = await api.settingsSetAiToken(token)
+      setStatus(s)
+      setToken('')
+      setMsg({ ok: true, text: 'Токен сохранён (зашифрован)' })
+    } catch (e) {
+      setMsg({ ok: false, text: e.message })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const clear = async () => {
+    if (!confirm('Удалить токен из БД? Будет использоваться ANTHROPIC_API_KEY из .env.'))
+      return
+    setBusy(true)
+    setMsg(null)
+    try {
+      const s = await api.settingsSetAiToken('')
+      setStatus(s)
+      setToken('')
+      setMsg({ ok: true, text: 'Токен удалён из БД (fallback на .env)' })
+    } catch (e) {
+      setMsg({ ok: false, text: e.message })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const sourceLabel =
+    status?.ai_token_source === 'db'
+      ? 'из БД (зашифрован)'
+      : status?.ai_token_source === 'env'
+        ? 'из .env (ANTHROPIC_API_KEY)'
+        : '—'
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <KeyRound size={16} className="text-fitsiz-green" />
+          AI-токен (Anthropic)
+        </CardTitle>
+      </CardHeader>
+      <CardBody className="space-y-4">
+        <div className="rounded-chip border border-fitsiz-border bg-fitsiz-black/40 p-4">
+          <div className="text-[12px] uppercase tracking-badge text-fitsiz-muted">
+            Текущий токен
+          </div>
+          <div className="mt-1.5 flex flex-wrap items-center gap-3">
+            {status?.ai_token_set ? (
+              <span className="font-mono text-[15px] text-fitsiz-white">
+                {status.ai_token_masked}
+              </span>
+            ) : (
+              <span className="text-[14px] text-amber-300">не задан</span>
+            )}
+            <span className="text-[12px] text-fitsiz-muted">· источник: {sourceLabel}</span>
+          </div>
+        </div>
+
+        {status && !status.ai_token_can_store_in_db && (
+          <div className="rounded-chip border border-amber-500/40 bg-amber-900/20 p-3 text-[13px] text-amber-200">
+            FITSIZ_SECRET_KEY в <code>.env</code> не задан — сохранение токена в БД
+            недоступно. Работает только fallback на <code>ANTHROPIC_API_KEY</code>.
+          </div>
+        )}
+
+        <div>
+          <label className="mb-1.5 block text-[12px] uppercase tracking-badge text-fitsiz-muted">
+            Новый токен (вставьте, чтобы заменить)
+          </label>
+          <Input
+            type="password"
+            placeholder="sk-ant-…"
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
+            autoComplete="off"
+            disabled={!status?.ai_token_can_store_in_db}
+          />
+          <p className="mt-1.5 text-[12px] text-fitsiz-muted">
+            Хранится только в зашифрованном виде. Полное значение нигде не
+            показывается и не возвращается обратно.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3 flex-wrap">
+          <Button
+            variant="primary"
+            size="md"
+            onClick={save}
+            disabled={busy || !token.trim() || !status?.ai_token_can_store_in_db}
+          >
+            {busy ? 'Сохранение…' : 'Сохранить токен'}
+          </Button>
+          {status?.ai_token_source === 'db' && (
+            <Button variant="outline" size="md" onClick={clear} disabled={busy}>
+              <Trash2 size={14} /> Удалить из БД
+            </Button>
+          )}
+          {msg && (
+            <span className={'text-[14px] ' + (msg.ok ? 'text-fitsiz-green' : 'text-red-400')}>
+              {msg.text}
+            </span>
+          )}
+        </div>
+      </CardBody>
+    </Card>
+  )
+}
+
 function SendModeCard() {
   const [auto, setAuto] = useState(false)
   const [err, setErr] = useState(null)
@@ -384,6 +620,10 @@ export default function SettingsPage() {
       />
 
       <ColdTemplateCard />
+
+      <ColdTimingCard />
+
+      <AiTokenCard />
 
       <SendModeCard />
 

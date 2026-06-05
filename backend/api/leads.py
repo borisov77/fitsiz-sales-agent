@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.database import get_db
-from backend.models.lead import Lead, LeadStatus
+from backend.models.lead import ColdStage, Lead, LeadStatus
 from backend.schemas import (
     ImportResult,
     LeadCreate,
@@ -98,10 +98,10 @@ def launch_campaign(
 ) -> LaunchCampaignResult:
     """Массовая генерация cold-писем для выбранных new-лидов.
 
-    AUTO_SEND=true  → письма ставятся в очередь (queued), лид → contacted,
+    AUTO_SEND=true  → письма ставятся в очередь (queued), лид → sent,
                       scheduler отправляет с антиспам-задержками 3-7 мин.
     AUTO_SEND=false → письма создаются как черновики (draft) на модерацию;
-                      лид остаётся new до ручного одобрения и отправки.
+                      лид остаётся created до ручного одобрения и отправки.
     """
     from backend.models.message import Message, MessageDirection, MessageStatus
     from backend.services.app_settings import get_auto_send
@@ -128,7 +128,7 @@ def launch_campaign(
         if lead is None:
             errors.append(f"{lead_id}: лид не найден")
             continue
-        if lead.status != LeadStatus.new:
+        if lead.status != LeadStatus.created:
             skipped += 1
             continue
         try:
@@ -148,7 +148,10 @@ def launch_campaign(
         )
         db.add(msg)
         if auto:
-            lead.status = LeadStatus.contacted
+            # Уводим из `created`, чтобы повторный запуск не задублировал письмо.
+            # cold_stage + next_action_at проставит send_queued в момент реальной
+            # отправки (тогда корректно стартует таймер напоминания).
+            lead.status = LeadStatus.sent
             queued += 1
         else:
             drafted += 1
@@ -184,7 +187,7 @@ def create_lead_manual(
         description=payload.description.strip(),
         contact_name=(payload.contact_name or None),
         source="manual",
-        status=LeadStatus.new,
+        status=LeadStatus.created,
     )
     db.add(lead)
     db.commit()
@@ -261,16 +264,81 @@ def delete_lead(lead_id: str, db: Annotated[Session, Depends(get_db)]):
     return None
 
 
-@router.post("/{lead_id}/transfer", response_model=LeadRead)
-def transfer_lead(
-    lead_id: str,
-    db: Annotated[Session, Depends(get_db)],
-    manager: Annotated[str, Query(min_length=1)] = "manager",
+@router.post("/{lead_id}/reactivate", response_model=LeadRead)
+def reactivate_lead(
+    lead_id: str, db: Annotated[Session, Depends(get_db)]
 ) -> Lead:
-    """Передаёт лида менеджеру: статус → transferred, assigned_to → <manager>."""
+    """Действие статуса no_reply «вернуть в работу»: запускает новый холодный цикл.
+
+    status → sent, cold_stage → awaiting_reply, next_action_at = +REMINDER_DELAY_DAYS.
+    follow_up_job снова отправит напоминание по таймеру. Применимо только к no_reply.
+    """
+    from datetime import datetime, timedelta
+
+    from backend.services.app_settings import get_reminder_delay_days
+
     lead = _get_or_404(db, lead_id)
-    lead.status = LeadStatus.transferred
-    lead.assigned_to = manager
+    if lead.status != LeadStatus.no_reply:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="«Вернуть в работу» доступно только для статуса «Осталось без ответа»",
+        )
+    lead.status = LeadStatus.sent
+    lead.cold_stage = ColdStage.awaiting_reply
+    lead.next_action_at = datetime.utcnow() + timedelta(
+        days=get_reminder_delay_days(db)
+    )
+    db.commit()
+    db.refresh(lead)
+    return lead
+
+
+class CloseDealRequest(BaseModel):
+    outcome: str  # 'won' | 'lost'
+    close_reason: str | None = None
+
+
+@router.post("/{lead_id}/close-deal", response_model=LeadRead)
+def close_deal(
+    lead_id: str,
+    payload: CloseDealRequest,
+    db: Annotated[Session, Depends(get_db)],
+) -> Lead:
+    """Закрытие сделки по переданному менеджеру лиду.
+
+    Доступно ТОЛЬКО из статуса handed_to_manager.
+      - outcome='won'  → статус won, closed_at=now, close_reason опционален
+      - outcome='lost' → статус lost, closed_at=now, close_reason ОБЯЗАТЕЛЕН
+    """
+    from datetime import datetime
+
+    lead = _get_or_404(db, lead_id)
+    if lead.status != LeadStatus.handed_to_manager:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="Закрыть сделку можно только у лида в статусе «Отправлено менеджеру»",
+        )
+
+    outcome = (payload.outcome or "").strip().lower()
+    reason = (payload.close_reason or "").strip()
+
+    if outcome == "won":
+        lead.status = LeadStatus.won
+    elif outcome == "lost":
+        if not reason:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail="Для «Сделка не состоялась» обязателен комментарий с причиной",
+            )
+        lead.status = LeadStatus.lost
+    else:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="outcome должен быть 'won' или 'lost'",
+        )
+
+    lead.close_reason = reason or None
+    lead.closed_at = datetime.utcnow()
     lead.next_action_at = None
     db.commit()
     db.refresh(lead)
@@ -281,12 +349,10 @@ def transfer_lead(
 def notify_manager(
     lead_id: str, db: Annotated[Session, Depends(get_db)]
 ) -> dict[str, object]:
-    """Ручная отправка уведомления о лиде на все почты менеджеров."""
+    """Передача менеджеру с борта Лидов/Дашборда — та же единая логика, что и transfer:
+    статус → handed_to_manager + бриф-репорт с перепиской (force=True)."""
     from backend.services.app_settings import get_manager_emails
-    from backend.services.manager_notifier import (
-        NotifierError,
-        notify_manager_about_warm_lead,
-    )
+    from backend.services.manager_notifier import NotifierError, hand_off_to_manager
 
     lead = _get_or_404(db, lead_id)
     recipients = get_manager_emails(db)
@@ -295,27 +361,10 @@ def notify_manager(
             status.HTTP_400_BAD_REQUEST,
             detail="Добавьте хотя бы одну почту менеджера в Настройках",
         )
-
-    # Последнее входящее сообщение клиента — в тело уведомления
-    last_incoming = next(
-        (
-            m.body_text
-            for m in sorted(lead.messages, key=lambda x: x.created_at, reverse=True)
-            if m.direction.value == "incoming"
-        ),
-        None,
-    )
     try:
-        message_id = notify_manager_about_warm_lead(
-            db, lead, last_incoming_text=last_incoming, force=True
-        )
+        message_id = hand_off_to_manager(db, lead, force=True)
     except NotifierError as exc:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
-
-    # Помечаем, что лид передан
-    if lead.status == LeadStatus.warm:
-        lead.status = LeadStatus.transferred
-        db.commit()
 
     return {
         "status": "sent",

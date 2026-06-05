@@ -10,9 +10,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.database import get_db
-from backend.models.lead import Lead, LeadStatus
+from backend.models.lead import ColdStage, Lead, LeadStatus
 from backend.models.message import Message, MessageDirection, MessageStatus
 from backend.services import ai_engine, antispam
+from backend.services.cold_template import COLD_TEMPLATE_MARKER
 from backend.services.email_sender import EmailSendError, send_email
 
 router = APIRouter(prefix="/api/conversations", tags=["conversations"])
@@ -293,23 +294,24 @@ def draft_reply(
         in_reply_to=anchor,
     )
 
-    # Лид стал тёплым → передача менеджеру (авто или вручную, по настройке)
-    if lead.status == LeadStatus.warm:
+    # Лид готов к сделке → передача менеджеру (авто или вручную, по настройке)
+    if lead.status == LeadStatus.handed_to_manager:
+        lead.cold_stage = None
+        lead.next_action_at = None  # вне холодной автоматики
+        db.commit()
         from backend.services.app_settings import get_auto_transfer
 
         if get_auto_transfer(db):
             from backend.services.manager_notifier import (
                 NotifierError,
-                notify_manager_about_warm_lead,
+                send_manager_report,
             )
 
             try:
-                notify_manager_about_warm_lead(
-                    db, lead, last_incoming_text=incoming.body_text
-                )
+                send_manager_report(db, lead)  # dedup 24ч, бриф + переписка
             except NotifierError:
                 # Не валим ответ агента, если SMTP/настройки подвели — лид
-                # остаётся warm, менеджера можно отправить вручную из дашборда.
+                # остаётся handed_to_manager, можно отправить вручную из дашборда.
                 pass
 
     return MessageRead.model_validate(msg)
@@ -319,13 +321,13 @@ def draft_reply(
 def draft_followup(
     lead_id: str,
     db: Annotated[Session, Depends(get_db)],
-    stage: Annotated[str, Query(pattern="^follow_up_[123]$")] = "follow_up_1",
 ) -> MessageRead:
+    """Ручное AI-напоминание в диалоге (одно, без стадий)."""
     lead = _get_lead(db, lead_id)
     messages = _conversation_messages(db, lead_id)
 
     try:
-        draft = ai_engine.generate_follow_up(lead, messages, stage)
+        draft = ai_engine.generate_follow_up(lead, messages)
     except ai_engine.AIEngineError as exc:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
@@ -456,8 +458,18 @@ def send_now(
 
     # Обновляем лида
     lead.last_contact_at = result.sent_at
-    if lead.status == LeadStatus.new:
-        lead.status = LeadStatus.contacted
+    if lead.status == LeadStatus.created:
+        lead.status = LeadStatus.sent
+    # Ручная отправка cold-письма тоже запускает холодный автомат
+    if msg.ai_prompt_used == COLD_TEMPLATE_MARKER and lead.status == LeadStatus.sent:
+        from datetime import timedelta
+
+        from backend.services.app_settings import get_reminder_delay_days
+
+        lead.cold_stage = ColdStage.awaiting_reply
+        lead.next_action_at = result.sent_at + timedelta(
+            days=get_reminder_delay_days(db)
+        )
 
     db.commit()
     db.refresh(msg)
@@ -472,11 +484,27 @@ def transfer(
     lead_id: str,
     db: Annotated[Session, Depends(get_db)],
     payload: Annotated[dict[str, Any], Body(default_factory=dict)],
-) -> dict[str, str]:
+) -> dict[str, object]:
+    """Единая точка передачи менеджеру: статус → handed_to_manager + бриф-репорт.
+
+    Ручной клик → force=True (дедуп не глушит). Если адресов менеджеров нет или
+    SMTP подвёл — статус всё равно переводится, отправку можно повторить.
+    """
+    from backend.services.manager_notifier import NotifierError, hand_off_to_manager
+
     lead = _get_lead(db, lead_id)
     manager = str(payload.get("manager") or "manager")
-    lead.status = LeadStatus.transferred
-    lead.assigned_to = manager
-    lead.next_action_at = None
-    db.commit()
-    return {"lead_id": lead.id, "status": lead.status.value, "assigned_to": lead.assigned_to}
+    report_id: str | None = None
+    error: str | None = None
+    try:
+        report_id = hand_off_to_manager(db, lead, manager=manager, force=True)
+    except NotifierError as exc:
+        error = str(exc)
+    return {
+        "lead_id": lead.id,
+        "status": lead.status.value,
+        "assigned_to": lead.assigned_to,
+        "report_message_id": report_id,
+        "report_sent": report_id is not None,
+        "error": error,
+    }

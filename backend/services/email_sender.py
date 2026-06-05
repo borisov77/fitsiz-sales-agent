@@ -134,6 +134,7 @@ def build_message(
     body_text: str,
     *,
     attachments: list[str] | None = None,
+    text_attachments: list[tuple[str, str]] | None = None,
     in_reply_to: str | None = None,
     references: list[str] | None = None,
     append_signature: bool = True,
@@ -168,9 +169,18 @@ def build_message(
     body = _compose_body(body_text, to, append_signature=append_signature)
     msg.set_content(body, subtype="plain", charset="utf-8")
 
-    # Вложения
+    # Вложения-файлы из documents/
     for path in _resolve_attachment_paths(attachments):
         _attach_file(msg, path)
+
+    # In-memory текстовые вложения (например, переписка .txt)
+    for filename, content in text_attachments or []:
+        msg.add_attachment(
+            (content or "").encode("utf-8"),
+            maintype="text",
+            subtype="plain",
+            filename=Path(filename).name,
+        )
 
     return msg
 
@@ -181,6 +191,7 @@ def send_email(
     body_text: str,
     *,
     attachments: list[str] | None = None,
+    text_attachments: list[tuple[str, str]] | None = None,
     in_reply_to: str | None = None,
     references: list[str] | None = None,
     append_signature: bool = True,
@@ -188,7 +199,8 @@ def send_email(
 ) -> SendResult:
     """Отправка письма через SMTP Mail.ru (SSL).
 
-    Вложения передаются как имена файлов внутри каталога `documents/`.
+    `attachments` — имена файлов внутри documents/. `text_attachments` —
+    пары (имя_файла, текст) для in-memory вложений (например, переписка .txt).
     Возвращает `SendResult` с `Message-ID` для дальнейшего threading.
     """
     msg = build_message(
@@ -196,6 +208,7 @@ def send_email(
         subject=subject,
         body_text=body_text,
         attachments=attachments,
+        text_attachments=text_attachments,
         in_reply_to=in_reply_to,
         references=references,
         append_signature=append_signature,

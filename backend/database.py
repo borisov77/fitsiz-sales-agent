@@ -66,16 +66,25 @@ def init_db() -> None:
 
 
 def _ensure_columns() -> None:
-    """Лёгкая авто-миграция: добавляет новые колонки в существующие таблицы.
+    """Лёгкая авто-миграция для SQLite/dev: добавляет недостающие колонки.
 
     create_all() не меняет уже созданные таблицы, поэтому для добавленных полей
-    (например leads.description) нужен идемпотентный ALTER. Только для SQLite/dev.
+    (например leads.description) нужен идемпотентный ALTER. Это хак уровня
+    SQLite-dev: типы тут SQLite-специфичны (DATETIME и т.п.). На Postgres схему
+    ведём через нормальные миграции (DDL применяется отдельно), а create_all
+    создаёт все колонки сразу — поэтому на не-SQLite просто выходим.
     """
+    if not engine.url.get_backend_name().startswith("sqlite"):
+        return
+
     from sqlalchemy import inspect, text
 
     # (таблица, колонка, SQL-тип) — добавляем, если колонки ещё нет
     expected: list[tuple[str, str, str]] = [
         ("leads", "description", "TEXT"),
+        ("leads", "cold_stage", "VARCHAR(20)"),
+        ("leads", "close_reason", "TEXT"),
+        ("leads", "closed_at", "DATETIME"),
     ]
     inspector = inspect(engine)
     with engine.begin() as conn:

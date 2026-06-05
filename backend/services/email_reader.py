@@ -90,19 +90,13 @@ def _save_incoming(
 
     # Обновляем состояние лида
     lead.last_contact_at = datetime.utcnow()
-    # Первый реальный ответ: статус → replied (если лид ещё в холодной зоне).
-    # dead_email включён намеренно: «мёртвый» лид, который вдруг ответил,
-    # должен подняться обратно в диалог, а не остаться в архиве.
-    transitions = {
-        LeadStatus.new,
-        LeadStatus.contacted,
-        LeadStatus.follow_up_1,
-        LeadStatus.follow_up_2,
-        LeadStatus.follow_up_3,
-        LeadStatus.dead_email,
-    }
-    if lead.status in transitions:
-        lead.status = LeadStatus.replied
+    # Реальный ответ поднимает лид в диалог ТОЛЬКО из холодной зоны.
+    # no_reply включён намеренно: «молчун», который вдруг ответил, должен
+    # вернуться в диалог. Из handed_to_manager/won/lost НЕ поднимаем —
+    # лид уже у менеджера/закрыт, ответ просто сохраняется как сообщение.
+    if lead.status in {LeadStatus.sent, LeadStatus.no_reply}:
+        lead.status = LeadStatus.in_dialog
+        lead.cold_stage = None  # вышли из холодной зоны
     # Сбрасываем плановое следующее действие — AI обработает свежий ответ
     lead.next_action_at = None
 

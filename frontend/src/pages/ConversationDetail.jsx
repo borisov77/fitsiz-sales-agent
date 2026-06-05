@@ -11,20 +11,17 @@ import {
   UserRound,
   Clock,
   Brain,
-  Flame,
   ArrowDownLeft,
   ArrowUpRight,
+  CheckCircle2,
+  XCircle,
 } from 'lucide-react'
 import { api } from '../lib/api.js'
 import { Card, CardBody } from '../components/Card.jsx'
 import { Button } from '../components/Button.jsx'
 import { Input, Textarea } from '../components/Input.jsx'
 import { Badge } from '../components/Badge.jsx'
-import {
-  FOLLOW_UP_STAGE_RU,
-  volumeLabel,
-  DIALOG_STATUSES,
-} from '../lib/labels.js'
+import { volumeLabel, DIALOG_STATUSES } from '../lib/labels.js'
 
 function MessageBubble({
   m,
@@ -33,7 +30,6 @@ function MessageBubble({
   onSend,
   onDelete,
   dialogMode = false,
-  onQualify,
 }) {
   const [editing, setEditing] = useState(false)
   const [subject, setSubject] = useState(m.subject || '')
@@ -190,14 +186,6 @@ function MessageBubble({
             <Pencil size={13} /> Править и отправить
           </Button>
           <Button
-            variant="lime"
-            size="sm"
-            onClick={onQualify}
-            title="Будет подключено на шаге 5: статус WARM + письмо менеджеру"
-          >
-            <Flame size={13} /> Квалифицировать → WARM
-          </Button>
-          <Button
             variant="outline"
             size="sm"
             onClick={() => {
@@ -248,6 +236,8 @@ export default function ConversationDetail() {
   const [err, setErr] = useState(null)
   const [busy, setBusy] = useState(null)
   const [qualifier, setQualifier] = useState(null)
+  const [closeMode, setCloseMode] = useState(null) // null | 'lost'
+  const [closeReason, setCloseReason] = useState('')
 
   const load = useCallback(async () => {
     setErr(null)
@@ -284,9 +274,9 @@ export default function ConversationDetail() {
       await api.draftReply(leadId)
       await load()
     })
-  const draftFollowUp = (stage) =>
-    runBusy(`fu:${stage}`, async () => {
-      await api.draftFollowUp(leadId, stage)
+  const draftFollowUp = () =>
+    runBusy('fu', async () => {
+      await api.draftFollowUp(leadId)
       await load()
     })
   const qualify = () =>
@@ -297,8 +287,36 @@ export default function ConversationDetail() {
     })
   const transfer = () =>
     runBusy('transfer', async () => {
-      if (!confirm('Передать лида менеджеру?')) return
-      await api.conversationTransfer(leadId)
+      if (
+        !confirm(
+          'Передать менеджеру? Лид перейдёт в статус «Отправлено менеджеру», ' +
+            'на почты менеджеров уйдёт бриф с резюме переписки и контактами + ' +
+            'полная переписка во вложении.',
+        )
+      )
+        return
+      const res = await api.conversationTransfer(leadId)
+      await load()
+      if (res?.report_sent) alert('Готово: лид передан, бриф отправлен менеджеру.')
+      else if (res?.error) alert(`Лид передан, но репорт не ушёл: ${res.error}`)
+      else alert('Лид передан. Репорт не отправлен (проверьте почты менеджеров в Настройках).')
+    })
+
+  const closeWon = () =>
+    runBusy('close', async () => {
+      const details = prompt('Детали договора (необязательно):') ?? ''
+      await api.closeDeal(leadId, 'won', details)
+      await load()
+    })
+  const submitLost = () =>
+    runBusy('close', async () => {
+      if (!closeReason.trim()) {
+        alert('Укажите причину — без комментария сделку закрыть нельзя.')
+        return
+      }
+      await api.closeDeal(leadId, 'lost', closeReason.trim())
+      setCloseMode(null)
+      setCloseReason('')
       await load()
     })
 
@@ -322,14 +340,6 @@ export default function ConversationDetail() {
   const onDelete = async (id) => {
     await api.messageDelete(id)
     await load()
-  }
-
-  // Заглушка: реальный эндпоинт (status WARM + письмо менеджеру) — шаг 5.
-  const onQualifyWarm = () => {
-    alert(
-      '«Квалифицировать → WARM» будет подключено на шаге 5:\n' +
-        'статус лида → WARM и авто-письмо живому менеджеру.',
-    )
   }
 
   if (!data && !err)
@@ -390,22 +400,81 @@ export default function ConversationDetail() {
         >
           <Sparkles size={13} /> {busy === 'reply' ? 'Ответ…' : 'Ответить AI'}
         </Button>
-        {['follow_up_1', 'follow_up_2', 'follow_up_3'].map((s) => (
-          <Button
-            key={s}
-            variant="outline"
-            size="sm"
-            onClick={() => draftFollowUp(s)}
-            disabled={busy === `fu:${s}`}
-          >
-            <Sparkles size={13} />{' '}
-            {busy === `fu:${s}` ? '…' : FOLLOW_UP_STAGE_RU[s]}
-          </Button>
-        ))}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={draftFollowUp}
+          disabled={busy === 'fu'}
+        >
+          <Sparkles size={13} /> {busy === 'fu' ? '…' : 'Напоминание'}
+        </Button>
         <Button variant="outline" size="sm" onClick={qualify} disabled={busy === 'qualify'}>
           <Brain size={13} /> {busy === 'qualify' ? 'Оценка…' : 'Квалифицировать'}
         </Button>
       </div>
+
+      {/* Закрытие сделки — только для лида, переданного менеджеру */}
+      {data.lead_status === 'handed_to_manager' && (
+        <Card className="mb-6 border-fitsiz-lime/30">
+          <CardBody>
+            <div className="mb-3 text-[13px] font-bold uppercase tracking-badge text-fitsiz-muted">
+              Итог по переданному лиду
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={closeWon}
+                disabled={busy === 'close'}
+              >
+                <CheckCircle2 size={14} /> Заключён договор
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCloseMode(closeMode === 'lost' ? null : 'lost')}
+                className="!ring-red-500/40 text-red-300 hover:!bg-red-900/20"
+              >
+                <XCircle size={14} /> Сделка не состоялась
+              </Button>
+            </div>
+            {closeMode === 'lost' && (
+              <div className="mt-4 space-y-2">
+                <label className="block text-[12px] uppercase tracking-badge text-fitsiz-muted">
+                  Причина (обязательно)
+                </label>
+                <Textarea
+                  rows={3}
+                  value={closeReason}
+                  onChange={(e) => setCloseReason(e.target.value)}
+                  placeholder="Почему сделка не состоялась — например: выбрали другого поставщика, нет бюджета…"
+                />
+                <div className="flex justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setCloseMode(null)
+                      setCloseReason('')
+                    }}
+                  >
+                    Отмена
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={submitLost}
+                    disabled={busy === 'close' || !closeReason.trim()}
+                    className="!bg-red-500/80 hover:!bg-red-500"
+                  >
+                    {busy === 'close' ? 'Закрываю…' : 'Закрыть как «не состоялась»'}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </CardBody>
+        </Card>
+      )}
 
       {qualifier && (
         <Card variant="accent" className="mb-6">
@@ -478,7 +547,6 @@ export default function ConversationDetail() {
               onSend={onSend}
               onDelete={onDelete}
               dialogMode={isDialog}
-              onQualify={onQualifyWarm}
             />
           ))
         )}

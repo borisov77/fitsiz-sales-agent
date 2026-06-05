@@ -1,6 +1,14 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Upload, Sparkles, ExternalLink, SendHorizonal, Rocket } from 'lucide-react'
+import {
+  Plus,
+  Upload,
+  Sparkles,
+  ExternalLink,
+  SendHorizonal,
+  Rocket,
+  RotateCcw,
+} from 'lucide-react'
 import { api } from '../lib/api.js'
 import { Card, CardBody } from '../components/Card.jsx'
 import { Button } from '../components/Button.jsx'
@@ -14,18 +22,13 @@ import { cn } from '../lib/cn.js'
 
 const STATUSES = [
   '',
-  'new',
-  'contacted',
-  'follow_up_1',
-  'follow_up_2',
-  'follow_up_3',
-  'replied',
-  'interested',
-  'negotiating',
-  'warm',
-  'transferred',
-  'rejected',
-  'unsubscribed',
+  'created',
+  'sent',
+  'in_dialog',
+  'handed_to_manager',
+  'won',
+  'lost',
+  'no_reply',
 ]
 
 export default function Leads() {
@@ -94,6 +97,18 @@ export default function Leads() {
     }
   }
 
+  const reactivate = async (leadId) => {
+    setBusyId(leadId)
+    try {
+      await api.leadReactivate(leadId)
+      await load()
+    } catch (e) {
+      alert(`Не получилось: ${e.message}`)
+    } finally {
+      setBusyId(null)
+    }
+  }
+
   const toggleOne = (id) =>
     setSelected((prev) => {
       const next = new Set(prev)
@@ -110,14 +125,14 @@ export default function Leads() {
       return new Set(allVisibleIds)
     })
 
-  // Кнопка активна, если выбран хотя бы один new-лид
+  // Кнопка активна, если выбран хотя бы один created-лид
   const selectedNewCount = filtered.filter(
-    (r) => selected.has(r.id) && r.status === 'new',
+    (r) => selected.has(r.id) && r.status === 'created',
   ).length
 
   const launchCampaign = async () => {
     const ids = filtered
-      .filter((r) => selected.has(r.id) && r.status === 'new')
+      .filter((r) => selected.has(r.id) && r.status === 'created')
       .map((r) => r.id)
     if (ids.length === 0) return
     if (
@@ -272,7 +287,18 @@ export default function Leads() {
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="inline-flex gap-2">
-                        {r.status === 'warm' ? (
+                        {r.status === 'created' && (
+                          <Button
+                            variant="primary"
+                            size="xs"
+                            onClick={() => generateCold(r.id)}
+                            disabled={busyId === r.id}
+                          >
+                            <Sparkles size={12} />
+                            {busyId === r.id ? 'Создаю…' : 'Cold'}
+                          </Button>
+                        )}
+                        {r.status === 'in_dialog' && (
                           <Button
                             variant="primary"
                             size="xs"
@@ -282,15 +308,16 @@ export default function Leads() {
                             <SendHorizonal size={12} />
                             {busyId === r.id ? 'Отправка…' : 'Менеджеру'}
                           </Button>
-                        ) : (
+                        )}
+                        {r.status === 'no_reply' && (
                           <Button
-                            variant="primary"
+                            variant="outline"
                             size="xs"
-                            onClick={() => generateCold(r.id)}
+                            onClick={() => reactivate(r.id)}
                             disabled={busyId === r.id}
                           >
-                            <Sparkles size={12} />
-                            {busyId === r.id ? 'Создаю…' : 'Cold'}
+                            <RotateCcw size={12} />
+                            {busyId === r.id ? '…' : 'Вернуть'}
                           </Button>
                         )}
                         <Link to={`/conversations/${r.id}`}>

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, String
+from sqlalchemy import DateTime, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.database import Base
@@ -17,7 +17,9 @@ class AppSetting(Base):
     __tablename__ = "app_settings"
 
     key: Mapped[str] = mapped_column(String(64), primary_key=True)
-    value: Mapped[str] = mapped_column(String(255))
+    # TEXT, а не VARCHAR(255): сюда кладётся в т.ч. шифртекст Fernet AI-токена
+    # (~200+ символов), который в ограниченную длину не помещается.
+    value: Mapped[str] = mapped_column(Text)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
     )

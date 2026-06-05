@@ -9,26 +9,19 @@ import {
 // русскую подпись. `children` override'ит всё.
 
 const statusClasses = {
-  // Воронка — нейтральные/в работе
-  new: 'bg-fitsiz-surface-2 text-fitsiz-muted-light ring-1 ring-fitsiz-border',
-  contacted: 'bg-fitsiz-surface-2 text-fitsiz-white ring-1 ring-fitsiz-border',
-  follow_up_1: 'bg-fitsiz-surface-2 text-fitsiz-white ring-1 ring-fitsiz-border',
-  follow_up_2: 'bg-fitsiz-surface-2 text-fitsiz-white ring-1 ring-fitsiz-border',
-  follow_up_3: 'bg-fitsiz-surface-2 text-fitsiz-muted-light ring-1 ring-fitsiz-border',
-  // Диалог — единый акцент бренда (зелёный): это рабочая зона человека
-  replied: 'bg-fitsiz-green/15 text-fitsiz-green ring-1 ring-fitsiz-green/40',
-  interested: 'bg-fitsiz-green/15 text-fitsiz-green ring-1 ring-fitsiz-green/40',
-  negotiating: 'bg-fitsiz-green/15 text-fitsiz-green ring-1 ring-fitsiz-green/40',
-  warm: 'bg-fitsiz-green text-fitsiz-black',
-  transferred: 'bg-fitsiz-lime text-fitsiz-black',
-  // Воронка — стоп
-  rejected: 'bg-red-900/30 text-red-400 ring-1 ring-red-500/30',
-  unsubscribed: 'bg-fitsiz-surface-2 text-fitsiz-muted ring-1 ring-fitsiz-border',
-  dead_email: 'bg-fitsiz-surface-2 text-fitsiz-muted ring-1 ring-fitsiz-border',
-  // Статусы сообщений
+  // --- Бизнес-статусы лида (7) ---
+  created: 'bg-fitsiz-surface-2 text-fitsiz-muted-light ring-1 ring-fitsiz-border',
+  // `sent` — и статус лида («Отправлено»), и статус сообщения («Отправлено»):
+  // один зелёный тон обслуживает оба, смысл совпадает.
+  sent: 'bg-fitsiz-green/15 text-fitsiz-green ring-1 ring-fitsiz-green/40',
+  in_dialog: 'bg-fitsiz-green/15 text-fitsiz-green ring-1 ring-fitsiz-green/40',
+  handed_to_manager: 'bg-fitsiz-lime text-fitsiz-black',
+  won: 'bg-fitsiz-green text-fitsiz-black',
+  lost: 'bg-red-900/30 text-red-400 ring-1 ring-red-500/30',
+  no_reply: 'bg-fitsiz-surface-2 text-fitsiz-muted ring-1 ring-fitsiz-border',
+  // --- Статусы сообщений ---
   draft: 'bg-fitsiz-lime/15 text-fitsiz-lime ring-1 ring-fitsiz-lime/40',
   queued: 'bg-fitsiz-surface-2 text-fitsiz-white ring-1 ring-fitsiz-border',
-  sent: 'bg-fitsiz-green/15 text-fitsiz-green ring-1 ring-fitsiz-green/40',
   received: 'bg-fitsiz-surface-2 text-fitsiz-white ring-1 ring-fitsiz-border',
   failed: 'bg-red-900/30 text-red-400 ring-1 ring-red-500/30',
   bounced: 'bg-red-900/30 text-red-400 ring-1 ring-red-500/30',

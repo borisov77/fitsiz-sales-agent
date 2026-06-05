@@ -23,18 +23,13 @@ import { PageHeader } from '../components/PageHeader.jsx'
 import { LEAD_STATUS_RU } from '../lib/labels.js'
 
 const FUNNEL_ORDER = [
-  'new',
-  'contacted',
-  'follow_up_1',
-  'follow_up_2',
-  'follow_up_3',
-  'replied',
-  'interested',
-  'negotiating',
-  'warm',
-  'transferred',
-  'rejected',
-  'unsubscribed',
+  'created',
+  'sent',
+  'in_dialog',
+  'handed_to_manager',
+  'won',
+  'lost',
+  'no_reply',
 ]
 
 function QuotaCard({ quota, onEdit, onReset }) {
@@ -182,29 +177,145 @@ function QuotaCard({ quota, onEdit, onReset }) {
   )
 }
 
+const STEP_LABEL = {
+  created: 'Создано (всего)',
+  sent: 'Отправлено',
+  in_dialog: 'Ответили',
+  handed_to_manager: 'У менеджера',
+  won: 'Договор',
+}
+
+function FunnelView({ funnel, counts }) {
+  if (!funnel) {
+    return <div className="text-[14px] text-fitsiz-muted">загрузка воронки…</div>
+  }
+  const top = funnel.steps?.[0]?.reached || 0
+  const conv = funnel.conversions || {}
+  const convItems = [
+    { label: 'Ответили / Отправлено', value: conv.reply_rate },
+    { label: 'Передано / Ответили', value: conv.qualify_rate },
+    { label: 'Договор / Передано', value: conv.deal_rate },
+  ]
+  const shareItems = [
+    { label: 'Осталось без ответа', value: conv.no_reply_share, n: funnel.terminals?.no_reply },
+    { label: 'Отказ', value: conv.lost_share, n: funnel.terminals?.lost },
+  ]
+
+  return (
+    <div className="space-y-6">
+      {/* Убывающие ступени воронки */}
+      <div className="space-y-2">
+        {funnel.steps.map((s) => {
+          const pct = top ? Math.round((s.reached / top) * 100) : 0
+          return (
+            <div key={s.key} className="flex items-center gap-3">
+              <div className="w-40 shrink-0 text-[13px] text-fitsiz-muted-light">
+                {STEP_LABEL[s.key] || s.key}
+              </div>
+              <div className="relative h-8 flex-1 overflow-hidden rounded-chip bg-fitsiz-surface-2">
+                <div
+                  className="h-full rounded-chip bg-fitsiz-green/30 ring-1 ring-fitsiz-green/40 transition-all"
+                  style={{ width: `${Math.max(pct, s.reached > 0 ? 6 : 0)}%` }}
+                />
+                <div className="absolute inset-0 flex items-center gap-2 px-3">
+                  <span className="font-heading text-[18px] leading-none text-fitsiz-white">
+                    {s.reached}
+                  </span>
+                  <span className="text-[11px] text-fitsiz-muted">{pct}%</span>
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Ключевые конверсии */}
+      <div>
+        <div className="mb-2 text-[11px] uppercase tracking-badge text-fitsiz-muted">
+          Конверсии
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          {convItems.map((m) => (
+            <div
+              key={m.label}
+              className="rounded-chip border border-fitsiz-border bg-fitsiz-black/40 px-4 py-3"
+            >
+              <div className="font-heading text-[26px] leading-none text-fitsiz-green">
+                {m.value ?? 0}%
+              </div>
+              <div className="mt-1.5 text-[11px] text-fitsiz-muted">{m.label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Терминалы сбоку */}
+      <div>
+        <div className="mb-2 text-[11px] uppercase tracking-badge text-fitsiz-muted">
+          Потери
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          {shareItems.map((m) => (
+            <div
+              key={m.label}
+              className="flex items-baseline justify-between rounded-chip border border-fitsiz-border bg-fitsiz-black/40 px-4 py-3"
+            >
+              <div>
+                <div className="font-heading text-[22px] leading-none text-fitsiz-white">
+                  {m.n ?? 0}
+                </div>
+                <div className="mt-1.5 text-[11px] text-fitsiz-muted">{m.label}</div>
+              </div>
+              <div className="text-[13px] text-fitsiz-muted-light">{m.value ?? 0}%</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Сырые счётчики по 7 статусам */}
+      <div className="flex flex-wrap gap-2">
+        {FUNNEL_ORDER.map((s) => (
+          <div
+            key={s}
+            className="flex items-center gap-2 rounded-chip bg-fitsiz-black/40 border border-fitsiz-border px-3 py-1.5"
+          >
+            <Badge variant={s}>{LEAD_STATUS_RU[s]}</Badge>
+            <span className="font-heading text-[16px] leading-none text-fitsiz-white">
+              {(counts[s] ?? funnel.counts?.[s]) || 0}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export default function Dashboard() {
   const [leads, setLeads] = useState([])
   const [quota, setQuota] = useState(null)
   const [conv, setConv] = useState([])
   const [docs, setDocs] = useState(null)
   const [campaign, setCampaign] = useState(null)
+  const [funnel, setFunnel] = useState(null)
   const [err, setErr] = useState(null)
   const [notifyBusy, setNotifyBusy] = useState(null)
 
   const loadAll = useCallback(async () => {
     try {
-      const [l, q, c, d, cs] = await Promise.all([
+      const [l, q, c, d, cs, fn] = await Promise.all([
         api.leadsList({ limit: 1000 }),
         api.emailQuota(),
         api.conversationsList({ limit: 500 }),
         api.documents(),
         api.campaignStatus(),
+        api.campaignFunnel(),
       ])
       setLeads(l || [])
       setQuota(q)
       setConv(c || [])
       setDocs(d)
       setCampaign(cs)
+      setFunnel(fn)
     } catch (e) {
       setErr(e.message)
     }
@@ -227,18 +338,11 @@ export default function Dashboard() {
     acc[s] = leads.filter((x) => x.status === s).length
     return acc
   }, {})
-  const activeCount =
-    counts.contacted +
-    counts.follow_up_1 +
-    counts.follow_up_2 +
-    counts.follow_up_3 +
-    counts.replied +
-    counts.interested +
-    counts.negotiating
-  const warmCount = counts.warm || 0
-  const transferred = counts.transferred || 0
+  const activeCount = (counts.sent || 0) + (counts.in_dialog || 0)
+  const handedCount = counts.handed_to_manager || 0
+  const wonCount = counts.won || 0
   const withDrafts = conv.filter((c) => c.has_draft)
-  const warmLeads = leads.filter((x) => x.status === 'warm')
+  const dialogLeads = leads.filter((x) => x.status === 'in_dialog')
 
   const notifyManager = async (leadId) => {
     setNotifyBusy(leadId)
@@ -295,19 +399,19 @@ export default function Dashboard() {
         <StatsCard
           label="В работе"
           value={activeCount}
-          hint="письма ушли, ждём реакции"
+          hint="отправлено + переписка"
           icon={Activity}
         />
         <StatsCard
-          label="Тёплые"
-          value={warmCount}
-          tone={warmCount ? 'accent' : 'default'}
+          label="У менеджера"
+          value={handedCount}
+          tone={handedCount ? 'accent' : 'default'}
           icon={Flame}
         />
         <StatsCard
-          label="Передано менеджеру"
-          value={transferred}
-          tone={transferred ? 'lime' : 'default'}
+          label="Заключено договоров"
+          value={wonCount}
+          tone={wonCount ? 'lime' : 'default'}
           icon={ClipboardCheck}
         />
       </div>
@@ -326,8 +430,8 @@ export default function Dashboard() {
                 { label: 'В очереди', value: campaign.queued, tone: 'lime' },
                 { label: 'Отправлено сегодня', value: campaign.sent_today },
                 { label: 'Ждут ответа', value: campaign.awaiting_reply },
-                { label: 'Ответили', value: campaign.replied },
-                { label: 'Тёплые', value: campaign.warm, tone: 'green' },
+                { label: 'В диалоге', value: campaign.in_dialog, tone: 'green' },
+                { label: 'У менеджера', value: campaign.handed },
               ].map((m) => (
                 <div
                   key={m.label}
@@ -358,22 +462,10 @@ export default function Dashboard() {
       <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle>Воронка по статусам</CardTitle>
+            <CardTitle>Конверсионная воронка</CardTitle>
           </CardHeader>
           <CardBody>
-            <div className="flex flex-wrap gap-2.5">
-              {FUNNEL_ORDER.map((s) => (
-                <div
-                  key={s}
-                  className="flex items-center gap-3 rounded-chip bg-fitsiz-black/40 border border-fitsiz-border px-4 py-2.5"
-                >
-                  <Badge variant={s}>{LEAD_STATUS_RU[s]}</Badge>
-                  <span className="font-heading text-[20px] leading-none text-fitsiz-white">
-                    {counts[s] || 0}
-                  </span>
-                </div>
-              ))}
-            </div>
+            <FunnelView funnel={funnel} counts={counts} />
           </CardBody>
         </Card>
 
@@ -384,17 +476,17 @@ export default function Dashboard() {
         />
       </div>
 
-      {warmLeads.length > 0 && (
+      {dialogLeads.length > 0 && (
         <Card className="mt-6 border-fitsiz-green/30">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Flame size={16} className="text-fitsiz-green" />
-              Тёплые лиды — ждут передачи менеджеру
+              Ведётся переписка — можно передать менеджеру
             </CardTitle>
           </CardHeader>
           <CardBody>
             <ul className="divide-y divide-fitsiz-border">
-              {warmLeads.map((l) => (
+              {dialogLeads.map((l) => (
                 <li
                   key={l.id}
                   className="flex items-center justify-between gap-4 py-4"

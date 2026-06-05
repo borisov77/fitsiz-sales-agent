@@ -24,19 +24,31 @@ class CompanyType(str, enum.Enum):
 
 
 class LeadStatus(str, enum.Enum):
-    new = "new"                    # загружен, ещё не контактировали
-    contacted = "contacted"        # отправлено первое письмо
-    follow_up_1 = "follow_up_1"    # первый follow-up
-    follow_up_2 = "follow_up_2"    # второй follow-up
-    follow_up_3 = "follow_up_3"    # финальный follow-up
-    replied = "replied"            # ответил (любой ответ)
-    interested = "interested"      # проявил интерес
-    negotiating = "negotiating"    # обсуждает условия
-    warm = "warm"                  # готов к работе
-    transferred = "transferred"    # передан менеджеру
-    rejected = "rejected"          # отказ
-    unsubscribed = "unsubscribed"  # попросил не писать
-    dead_email = "dead_email"      # холодный лид не ответил за 5 дней — архив/стоп
+    """Семь бизнес-статусов воронки — единственное, что видит дашборд.
+
+    Под-состояния холодной автоматики НЕ живут здесь — для них служебное
+    поле `cold_stage` (см. ниже). Это держит бизнес-словарь чистым под
+    White Label: значения переименовываются/перекрашиваются 1:1.
+    """
+
+    created = "created"                      # 1. загружен/создан, рассылка не запущена
+    sent = "sent"                            # 2. cold ушло, идёт холодный автомат
+    in_dialog = "in_dialog"                  # 3. лид ответил, ведётся переписка
+    handed_to_manager = "handed_to_manager"  # 4. передан менеджеру с репортом
+    won = "won"                              # 5. заключён договор
+    lost = "lost"                            # 6. сделка не состоялась (+ close_reason)
+    no_reply = "no_reply"                    # 7. осталось без ответа (видимый, не терминал)
+
+
+class ColdStage(str, enum.Enum):
+    """Под-состояние ВНУТРИ статуса `sent` — деталь холодной автоматики.
+
+    Никогда не показывается в UI. Осмысленно только при `status == sent`;
+    в остальных статусах = NULL. Инвариант: cold_stage != NULL ⇒ status == sent.
+    """
+
+    awaiting_reply = "awaiting_reply"  # cold ушло, напоминание ещё не слали
+    reminder_sent = "reminder_sent"    # напоминание ушло, ждём финальный срок → no_reply
 
 
 def _uuid() -> str:
@@ -68,12 +80,22 @@ class Lead(Base):
 
     # --- Состояние ---
     status: Mapped[LeadStatus] = mapped_column(
-        Enum(LeadStatus), default=LeadStatus.new, index=True
+        Enum(LeadStatus), default=LeadStatus.created, index=True
+    )
+    # Под-состояние холодной зоны (только при status==sent), не показывается в UI.
+    cold_stage: Mapped[ColdStage | None] = mapped_column(
+        Enum(ColdStage), nullable=True
     )
     campaign_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("campaigns.id", ondelete="SET NULL"), nullable=True
     )
+    # Информационное поле (кто ведёт). Гейтом автоматики БОЛЬШЕ не является —
+    # автозадачи отбирают лидов строго по status.
     assigned_to: Mapped[str] = mapped_column(String(100), default="agent")
+
+    # --- Закрытие сделки (статусы won / lost) ---
+    close_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     # --- Времена ---
     created_at: Mapped[datetime] = mapped_column(

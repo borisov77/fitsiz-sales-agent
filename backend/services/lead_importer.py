@@ -140,7 +140,7 @@ def import_rows(
                 source=row.get("source") or "csv_import",  # type: ignore[arg-type]
                 notes=row.get("notes"),  # type: ignore[arg-type]
                 campaign_id=campaign_id,
-                status=LeadStatus.new,
+                status=LeadStatus.created,
                 created_at=datetime.utcnow(),
             )
             db.add(lead)
